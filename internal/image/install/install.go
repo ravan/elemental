@@ -62,6 +62,7 @@ type Installation struct {
 	SchemaVersion string        `yaml:"schema"`
 	Bootloader    string        `yaml:"bootloader" validate:"omitempty,oneof=grub none"`
 	KernelCmdLine string        `yaml:"kernelCmdLine"`
+	SerialConsole bool          `yaml:"serialConsole"`
 	RAW           RAW           `yaml:"raw"`
 	ISO           ISO           `yaml:"iso"`
 	CryptoPolicy  crypto.Policy `yaml:"cryptoPolicy" validate:"omitempty,oneof=fips default"`

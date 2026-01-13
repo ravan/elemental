@@ -41,11 +41,17 @@ type Grub struct {
 }
 
 type grubBootEntry struct {
-	Linux       string
-	Initrd      string
-	CmdLine     string
-	DisplayName string
-	ID          string
+	Linux         string
+	Initrd        string
+	CmdLine       string
+	DisplayName   string
+	ID            string
+	SerialConsole bool
+}
+
+type grubTemplateData struct {
+	Label         string
+	SerialConsole bool
 }
 
 type Option func(*Grub)
@@ -80,7 +86,7 @@ var grubLiveEFICfg []byte
 var grubLiveCfg []byte
 
 // InstallLive installs the live bootloader to the specified target.
-func (g *Grub) InstallLive(rootPath, target, kernelCmdLine string) error {
+func (g *Grub) InstallLive(rootPath, target, kernelCmdLine string, serialConsole bool) error {
 	g.s.Logger().Info("Preparing GRUB bootloader for live media")
 
 	err := g.installGrub(rootPath, filepath.Join(target, liveBootPath))
@@ -93,6 +99,7 @@ func (g *Grub) InstallLive(rootPath, target, kernelCmdLine string) error {
 		return fmt.Errorf("installing kernel+initrd: %w", err)
 	}
 	entry.CmdLine = kernelCmdLine
+	entry.SerialConsole = serialConsole
 
 	err = g.writeGrubConfig(filepath.Join(target, liveBootPath, "grub2"), grubLiveCfg, entry)
 	if err != nil {
@@ -122,8 +129,8 @@ func (g *Grub) InstallLive(rootPath, target, kernelCmdLine string) error {
 }
 
 // Install installs the bootloader to the specified root.
-func (g *Grub) Install(rootPath, espDir, espLabel, entryID, kernelCmdline, recKernelCmdline string) error {
-	err := g.installElementalEFI(rootPath, espDir, espLabel)
+func (g *Grub) Install(rootPath, espDir, espLabel, entryID, kernelCmdline, recKernelCmdline string, serialConsole bool) error {
+	err := g.installElementalEFI(rootPath, espDir, espLabel, serialConsole)
 	if err != nil {
 		return fmt.Errorf("installing elemental EFI apps: %w", err)
 	}
@@ -337,12 +344,17 @@ func (g Grub) writeGrubConfig(targetDir string, cfgTemplate []byte, data any) er
 }
 
 // installElementalEFI installs the efi applications (shim, MokManager, grub.efi) and grub.cfg into the ESP.
-func (g *Grub) installElementalEFI(rootPath, espDir, espLabel string) error {
+func (g *Grub) installElementalEFI(rootPath, espDir, espLabel string, serialConsole bool) error {
 	g.s.Logger().Info("Installing EFI applications")
+
+	templateData := grubTemplateData{
+		Label:         espLabel,
+		SerialConsole: serialConsole,
+	}
 
 	for _, efiEntry := range []string{"BOOT", "ELEMENTAL"} {
 		targetDir := filepath.Join(espDir, "EFI", efiEntry)
-		err := g.installEFIEntry(rootPath, targetDir, grubCfg, map[string]string{"Label": espLabel})
+		err := g.installEFIEntry(rootPath, targetDir, grubCfg, templateData)
 		if err != nil {
 			return fmt.Errorf("failed setting '%s' EFI entry: %w", efiEntry, err)
 		}
