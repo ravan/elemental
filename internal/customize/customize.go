@@ -210,6 +210,7 @@ func parseDeployment(
 	d.BootConfig = &deployment.BootConfig{
 		Bootloader:    install.Bootloader,
 		KernelCmdline: install.KernelCmdLine,
+		SerialConsole: install.SerialConsole,
 	}
 
 	d.Security = &deployment.SecurityConfig{

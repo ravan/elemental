@@ -182,8 +182,10 @@ func (u Upgrader) Upgrade(d *deployment.Deployment) (err error) {
 	}
 
 	cmdline := ""
+	serialConsole := false
 	if d.BootConfig != nil {
 		cmdline = d.BootConfig.KernelCmdline
+		serialConsole = d.BootConfig.SerialConsole
 	}
 
 	kernelCmdline := strings.TrimSpace(fmt.Sprintf("%s %s %s", d.BaseKernelCmdline(), uh.GenerateKernelCmdline(trans), cmdline))
@@ -193,7 +195,7 @@ func (u Upgrader) Upgrade(d *deployment.Deployment) (err error) {
 	}
 
 	espDir := filepath.Join(trans.Path, esp.MountPoint)
-	err = u.b.Install(trans.Path, espDir, esp.Label, strconv.Itoa(trans.ID), kernelCmdline, recKernelCmdline)
+	err = u.b.Install(trans.Path, espDir, esp.Label, strconv.Itoa(trans.ID), kernelCmdline, recKernelCmdline, serialConsole)
 	if err != nil {
 		return fmt.Errorf("installing bootloader: %w", err)
 	}
