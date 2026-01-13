@@ -114,7 +114,7 @@ var _ = Describe("Grub tests", Label("bootloader", "grub"), func() {
 
 	It("Copies EFI applications to ESP", func() {
 		// without providing a recovery kernel cmdline the recovery entry is not created
-		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "kernel cmdline", "")
+		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "kernel cmdline", "", false)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Shim, MokManager and grub.efi should exist.
@@ -133,7 +133,7 @@ var _ = Describe("Grub tests", Label("bootloader", "grub"), func() {
 		Expect(vfs.Exists(tfs, "/target/dir/boot/loader/entries/recovery")).To(BeFalse())
 	})
 	It("Installs grub for LiveOS image", func() {
-		err := grub.InstallLive("/target/dir", "/iso/dir", "kernel cmdline")
+		err := grub.InstallLive("/target/dir", "/iso/dir", "kernel cmdline", false)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Shim, MokManager and grub.efi should exist.
@@ -155,15 +155,15 @@ var _ = Describe("Grub tests", Label("bootloader", "grub"), func() {
 		err := tfs.Remove("/target/dir/usr/lib/modules/6.14.4-1-default/initrd")
 		Expect(err).ToNot(HaveOccurred())
 
-		err = grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "kernel cmdline", "")
+		err = grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "kernel cmdline", "", false)
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError("installing kernel+initrd: initrd not found"))
 	})
 	It("Leaves old snapshots and overwrites 'active' entry", func() {
-		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "snapshot1", "recovery cmdline")
+		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "snapshot1", "recovery cmdline", false)
 		Expect(err).ToNot(HaveOccurred())
 
-		err = grub.Install("/target/dir", "/target/dir/boot", "EFI", "2", "snapshot2", "recovery cmdline")
+		err = grub.Install("/target/dir", "/target/dir/boot", "EFI", "2", "snapshot2", "recovery cmdline", false)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Entries 1, 2 and 'active' should exist
@@ -191,6 +191,39 @@ var _ = Describe("Grub tests", Label("bootloader", "grub"), func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(string(entries)).To(Equal("entries=active 2 1 recovery"))
 	})
+	It("Generates serial console configuration when enabled", func() {
+		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "kernel cmdline", "", true)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Check that the grub.cfg contains serial console configuration
+		bootGrubCfg, err := tfs.ReadFile("/target/dir/boot/EFI/ELEMENTAL/grub.cfg")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(bootGrubCfg)).To(ContainSubstring("serial --unit=0 --speed=115200"))
+		Expect(string(bootGrubCfg)).To(ContainSubstring("terminal_input serial console"))
+		Expect(string(bootGrubCfg)).To(ContainSubstring("terminal_output serial console"))
+		Expect(string(bootGrubCfg)).NotTo(ContainSubstring("gfxterm"))
+	})
+	It("Generates graphics terminal config when serial console disabled", func() {
+		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "kernel cmdline", "", false)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Check that the grub.cfg contains gfxterm configuration
+		bootGrubCfg, err := tfs.ReadFile("/target/dir/boot/EFI/ELEMENTAL/grub.cfg")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(bootGrubCfg)).To(ContainSubstring("gfxterm"))
+		Expect(string(bootGrubCfg)).NotTo(ContainSubstring("serial --unit=0"))
+	})
+	It("Generates serial console in live config when enabled", func() {
+		err := grub.InstallLive("/target/dir", "/iso/dir", "kernel cmdline", true)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Check that the grub.cfg contains serial console configuration
+		liveGrubCfg, err := tfs.ReadFile("/iso/dir/boot/grub2/grub.cfg")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(liveGrubCfg)).To(ContainSubstring("serial --unit=0 --speed=115200"))
+		Expect(string(liveGrubCfg)).To(ContainSubstring("terminal_input serial console"))
+		Expect(string(liveGrubCfg)).To(ContainSubstring("terminal_output serial console"))
+	})
 	It("Prunes old snapshots", func() {
 		// "Install" older (6.6.99) kernel
 		Expect(vfs.MkdirAll(tfs, "/target/dir/boot/opensuse-tumbleweed/6.6.99-1-default", vfs.DirPerm)).To(Succeed())
@@ -198,10 +231,10 @@ var _ = Describe("Grub tests", Label("bootloader", "grub"), func() {
 		Expect(tfs.WriteFile("/target/dir/boot/opensuse-tumbleweed/6.6.99-1-default/.vmlinuz.hmac", []byte("6.6.99-1-default vmlinux"), vfs.FilePerm)).To(Succeed())
 		Expect(tfs.WriteFile("/target/dir/boot/opensuse-tumbleweed/6.6.99-1-default/initrd", []byte("6.6.99-1-default vmlinux"), vfs.FilePerm)).To(Succeed())
 
-		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "snapshot1", "recoverycmd")
+		err := grub.Install("/target/dir", "/target/dir/boot", "EFI", "1", "snapshot1", "recoverycmd", false)
 		Expect(err).ToNot(HaveOccurred())
 
-		err = grub.Install("/target/dir", "/target/dir/boot", "EFI", "2", "snapshot2", "recoverycmd")
+		err = grub.Install("/target/dir", "/target/dir/boot", "EFI", "2", "snapshot2", "recoverycmd", false)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Entries 1, 2, 'active' and 'recovery' should exist

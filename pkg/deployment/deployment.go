@@ -218,6 +218,7 @@ type Disk struct {
 type BootConfig struct {
 	Bootloader    string `yaml:"name"`
 	KernelCmdline string `yaml:"kernelCmdline"`
+	SerialConsole bool   `yaml:"serialConsole,omitempty"`
 }
 
 type FirmwareConfig struct {
