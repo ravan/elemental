@@ -1,0 +1,7 @@
+# User data configuration for dynamic node setup
+# At boot time, elemental will fetch user data from cloud provider or filesystem
+# and use it to configure the RKE2 node type dynamically.
+enabled: true
+providers: ["auto"]  # auto-detect: aws, azure, gcp, filesystem
+timeout: 120
+retries: 5

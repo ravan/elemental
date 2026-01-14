@@ -53,7 +53,10 @@ func (c *Config) MergeInlineIgnition(ignitionConf string) {
 func (c *Config) AddSystemdUnit(name, contents string, enabled bool) {
 	var unit base.Unit
 
-	unit.Contents = &contents
+	// Only set contents if non-empty (enables service without overriding unit file)
+	if contents != "" {
+		unit.Contents = &contents
+	}
 	unit.Enabled = &enabled
 	unit.Name = name
 
