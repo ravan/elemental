@@ -34,6 +34,7 @@ import (
 	"github.com/suse/elemental/v3/pkg/deployment"
 	"github.com/suse/elemental/v3/pkg/manifest/source"
 	"github.com/suse/elemental/v3/pkg/sys/vfs"
+	"github.com/suse/elemental/v3/pkg/userdata"
 )
 
 type Dir string
@@ -52,6 +53,10 @@ func (dir Dir) KubernetesFilepath() string {
 
 func (dir Dir) ButaneFilepath() string {
 	return filepath.Join(string(dir), "butane.yaml")
+}
+
+func (dir Dir) UserDataFilepath() string {
+	return filepath.Join(string(dir), "userdata.yaml")
 }
 
 func (dir Dir) kubernetesDir() string {
@@ -179,6 +184,18 @@ func Parse(f vfs.FS, configDir Dir) (conf *image.Configuration, err error) {
 		return nil, fmt.Errorf("parsing custom directory: %w", err)
 	}
 
+	// Parse userdata.yaml if it exists
+	conf.UserData = userdata.DefaultConfig()
+	data, err = f.ReadFile(configDir.UserDataFilepath())
+	if err == nil {
+		if err = parseAny(data, &conf.UserData); err != nil {
+			return nil, fmt.Errorf("parsing config file %q: %w", configDir.UserDataFilepath(), err)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("reading config file: %w", err)
+	}
+
+	// Parse butane.yaml
 	data, err = f.ReadFile(configDir.ButaneFilepath())
 	if err == nil {
 		if err = parseAny(data, &conf.ButaneConfig); err != nil {
