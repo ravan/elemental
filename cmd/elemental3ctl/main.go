@@ -39,6 +39,7 @@ func main() {
 		cmd.NewUnpackImageCommand(appName, action.Unpack),
 		cmd.NewBuildInstallerCommand(appName, action.BuildInstaller),
 		cmd.NewResetCommand(appName, action.Reset),
+		cmd.NewK8sDynamicCommand(appName, action.K8sDynamicApply),
 		cmd.NewVersionCommand(appName))
 
 	if err := application.Run(os.Args); err != nil {

@@ -42,6 +42,9 @@ var k8sResDeployScriptTpl string
 //go:embed templates/k8s_conf_deploy.sh.tpl
 var k8sConfDeployScriptTpl string
 
+//go:embed templates/k8s_conf_deploy_dynamic.sh.tpl
+var K8sConfDeployDynamicScriptTpl string
+
 func needsManifestsSetup(conf *image.Configuration) bool {
 	return len(conf.Kubernetes.RemoteManifests) > 0 || len(conf.Kubernetes.LocalManifests) > 0 || conf.Kubernetes.Network.IsHA()
 }

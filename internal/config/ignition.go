@@ -41,6 +41,7 @@ const (
 	updateLinkerCacheUnitName   = "update-linker-cache.service"
 	k8sResourcesUnitName        = "k8s-resource-installer.service"
 	k8sConfigUnitName           = "k8s-config-installer.service"
+	k8sDynamicUnitName          = "elemental-k8s-dynamic.service"
 )
 
 var (
@@ -61,14 +62,19 @@ var (
 
 	//go:embed templates/k8s-vip.yaml.tpl
 	k8sVIPManifestTpl string
+
+	//go:embed templates/elemental-k8s-dynamic.service.tpl
+	k8sDynamicUnitTpl string
 )
 
 // configureIgnition writes the Ignition configuration file including:
 // * Predefined Butane configuration
 // * Kubernetes configuration and deployment files
 // * Systemd extensions
+// * K8s dynamic service (when user data is enabled)
 func (m *Manager) configureIgnition(conf *image.Configuration, output Output, k8sScript, k8sConfScript string, ext []api.SystemdExtension) error {
 	if len(conf.ButaneConfig) == 0 &&
+		!conf.UserData.Enabled &&
 		k8sScript == "" &&
 		k8sConfScript == "" &&
 		len(ext) == 0 {
@@ -85,6 +91,7 @@ func (m *Manager) configureIgnition(conf *image.Configuration, output Output, k8
 	config.Variant = variant
 	config.Version = version
 
+	// Handle butane configuration - always render statically at build time
 	if len(conf.ButaneConfig) > 0 {
 		m.system.Logger().Info("Translating butane configuration to Ignition syntax")
 
@@ -95,6 +102,15 @@ func (m *Manager) configureIgnition(conf *image.Configuration, output Output, k8
 		config.MergeInlineIgnition(string(ignitionBytes))
 	} else {
 		m.system.Logger().Info("No butane configuration to translate into Ignition syntax")
+	}
+
+	// When user data is enabled, add k8s-dynamic service for post-boot K8s config rendering
+	if conf.UserData.Enabled {
+		m.system.Logger().Info("User data enabled: configuring k8s-dynamic service for boot-time K8s config rendering")
+
+		if err := m.configureK8sDynamic(conf, &config); err != nil {
+			return fmt.Errorf("configuring k8s-dynamic: %w", err)
+		}
 	}
 
 	if k8sScript != "" {
@@ -261,5 +277,36 @@ func marshalConfig(config map[string]any) ([]byte, error) {
 		return nil, fmt.Errorf("serializing kubernetes config: %w", err)
 	}
 
+	return data, nil
+}
+
+// configureK8sDynamic sets up the k8s-dynamic service for post-boot K8s config rendering.
+// The service will auto-detect the cloud environment and fetch userdata at boot time.
+func (m *Manager) configureK8sDynamic(conf *image.Configuration, config *butane.Config) error {
+	k8sDynamicUnit, err := generateK8sDynamicUnit(conf.UserData.Timeout)
+	if err != nil {
+		return fmt.Errorf("generating k8s-dynamic unit: %w", err)
+	}
+
+	config.AddSystemdUnit(k8sDynamicUnitName, k8sDynamicUnit, true)
+
+	return nil
+}
+
+func generateK8sDynamicUnit(timeout int) (string, error) {
+	if timeout <= 0 {
+		timeout = 120
+	}
+
+	values := struct {
+		Timeout int
+	}{
+		Timeout: timeout,
+	}
+
+	data, err := template.Parse(k8sDynamicUnitName, k8sDynamicUnitTpl, &values)
+	if err != nil {
+		return "", fmt.Errorf("parsing k8s-dynamic service template: %w", err)
+	}
 	return data, nil
 }

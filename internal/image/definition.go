@@ -21,8 +21,8 @@ import (
 	"github.com/suse/elemental/v3/internal/image/install"
 	"github.com/suse/elemental/v3/internal/image/kubernetes"
 	"github.com/suse/elemental/v3/internal/image/release"
-
 	"github.com/suse/elemental/v3/pkg/sys/platform"
+	"github.com/suse/elemental/v3/pkg/userdata"
 )
 
 const (
@@ -35,12 +35,13 @@ type Definition struct {
 }
 
 type Configuration struct {
-	Installation install.Installation
-	Release      release.Release
-	Kubernetes   kubernetes.Kubernetes
-	Network      Network
-	Custom       Custom
-	ButaneConfig map[string]any
+	Installation   install.Installation
+	Release        release.Release
+	Kubernetes     kubernetes.Kubernetes
+	Network        Network
+	Custom         Custom
+	ButaneConfig   map[string]any
+	UserData       userdata.Config
 }
 
 type Image struct {

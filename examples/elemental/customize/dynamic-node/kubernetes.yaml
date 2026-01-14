@@ -1,0 +1,42 @@
+# Dynamic node configuration
+# Node type (server/agent, init) is determined at boot time via user data.
+# No static nodes list required - each node reads its role from cloud provider metadata.
+#
+# Example user data for different node types:
+#
+# Init node (bootstraps cluster):
+#   rke2:
+#     type: server
+#     init: true
+#     token: my-cluster-token
+#     tls_san:
+#       - 192.168.122.100
+#       - api.example.com
+#
+# Joining server (additional control plane):
+#   rke2:
+#     type: server
+#     server: https://192.168.122.100:9345
+#     token: my-cluster-token
+#
+# Agent (worker node):
+#   rke2:
+#     type: agent
+#     server: https://192.168.122.100:9345
+#     token: my-cluster-token
+
+manifests:
+  - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.31/deploy/local-path-storage.yaml
+helm:
+  charts:
+    - name: "neuvector-crd"
+      version: "106.0.0+up2.8.5"
+      targetNamespace: "neuvector-system"
+      repositoryName: "rancher-charts"
+    - name: "neuvector"
+      version: "106.0.0+up2.8.5"
+      targetNamespace: "neuvector-system"
+      repositoryName: "rancher-charts"
+  repositories:
+    - name: "rancher-charts"
+      url: "https://charts.rancher.io"
