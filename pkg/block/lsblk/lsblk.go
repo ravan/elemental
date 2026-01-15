@@ -116,7 +116,7 @@ func unmarshalSectorSize(lsblkOut []byte) (uint, error) {
 
 	devices := []struct {
 		Name       string `json:"name,omitempty"`
-		SectorSize uint   `json:"phy-sec,omitempty"`
+		SectorSize uint   `json:"log-sec,omitempty"`
 	}{}
 	err = json.Unmarshal(*objmap["blockdevices"], &devices)
 	if err != nil {
@@ -151,9 +151,11 @@ func (l lsDevice) GetDevicePartitions(device string) (block.PartitionList, error
 	return unmarshalLsblk(out)
 }
 
-// GetDeviceSectorSize returns the physical sector size for the given block device
+// GetDeviceSectorSize returns the logical sector size for the given block device.
+// GPT partition tables are written using logical sector size, so this must match
+// for tools like systemd-repart to correctly parse the partition table.
 func (l lsDevice) GetDeviceSectorSize(device string) (uint, error) {
-	out, err := l.runner.Run("lsblk", "-J", "-d", "-o", "NAME,PHY-SEC", device)
+	out, err := l.runner.Run("lsblk", "-J", "-d", "-o", "NAME,LOG-SEC", device)
 	if err != nil {
 		return 0, err
 	}

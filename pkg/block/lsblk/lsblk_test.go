@@ -34,7 +34,7 @@ const sectorSizeLsblk = `{
    "blockdevices": [
       {
          "name": "nvme0n1",
-         "phy-sec": 512
+         "log-sec": 512
       }
    ]
 }
