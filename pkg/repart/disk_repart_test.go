@@ -47,7 +47,7 @@ const sectorSizeJson = `{
    "blockdevices": [
       {
          "name": "device",
-         "phy-sec": 512
+         "log-sec": 512
       }
    ]
 }`

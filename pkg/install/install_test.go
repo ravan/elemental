@@ -49,7 +49,7 @@ const sectorSizeJson = `{
    "blockdevices": [
       {
          "name": "device",
-         "phy-sec": 512
+         "log-sec": 512
       }
    ]
 }`
@@ -146,7 +146,7 @@ var _ = Describe("Install", Label("install"), func() {
 			return []byte(systemdRepartJson), runner.ReturnError
 		}
 		sideEffects["lsblk"] = func(args ...string) ([]byte, error) {
-			if slices.Contains(args, "NAME,PHY-SEC") {
+			if slices.Contains(args, "NAME,LOG-SEC") {
 				return []byte(sectorSizeJson), runner.ReturnError
 			}
 			if slices.Contains(args, "/dev/device") {
