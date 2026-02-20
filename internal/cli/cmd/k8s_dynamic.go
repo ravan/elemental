@@ -18,9 +18,10 @@ limitations under the License.
 package cmd
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // K8sDynamicFlags contains the flags for the k8s-dynamic command.
@@ -35,11 +36,11 @@ type K8sDynamicFlags struct {
 var K8sDynamicArgs K8sDynamicFlags
 
 // NewK8sDynamicCommand creates the k8s-dynamic command with its subcommands.
-func NewK8sDynamicCommand(appName string, applyAction func(*cli.Context) error) *cli.Command {
+func NewK8sDynamicCommand(appName string, applyAction func(context.Context, *cli.Command) error) *cli.Command {
 	return &cli.Command{
 		Name:  "k8s-dynamic",
 		Usage: "Manage dynamic Kubernetes configuration from cloud userdata",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:      "apply",
 				Usage:     "Fetch user data and render Kubernetes config templates",
