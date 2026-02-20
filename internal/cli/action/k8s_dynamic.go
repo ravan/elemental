@@ -18,14 +18,15 @@ limitations under the License.
 package action
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/suse/elemental/v3/internal/cli/cmd"
+	cmdpkg "github.com/suse/elemental/v3/internal/cli/cmd"
 	"github.com/suse/elemental/v3/internal/config"
 	"github.com/suse/elemental/v3/internal/image"
 	"github.com/suse/elemental/v3/internal/template"
@@ -40,13 +41,13 @@ const (
 
 // K8sDynamicApply fetches user data and renders Kubernetes config templates.
 // This runs AFTER ignition-firstboot, before k8s-config-installer.
-func K8sDynamicApply(ctx *cli.Context) error {
+func K8sDynamicApply(ctx context.Context, cmd *cli.Command) error {
 	var s *sys.System
-	args := &cmd.K8sDynamicArgs
-	if ctx.App.Metadata == nil || ctx.App.Metadata["system"] == nil {
+	args := &cmdpkg.K8sDynamicArgs
+	if cmd.Root().Metadata == nil || cmd.Root().Metadata["system"] == nil {
 		return fmt.Errorf("error setting up initial configuration")
 	}
-	s = ctx.App.Metadata["system"].(*sys.System)
+	s = cmd.Root().Metadata["system"].(*sys.System)
 
 	s.Logger().Info("Starting k8s-dynamic apply action")
 
@@ -70,7 +71,7 @@ func K8sDynamicApply(ctx *cli.Context) error {
 		cfg.Providers, cfg.Timeout, cfg.Retries)
 
 	// Fetch user data from cloud provider
-	userData, err := userdata.FetchUserData(ctx.Context, s, cfg)
+	userData, err := userdata.FetchUserData(ctx, s, cfg)
 	if err != nil {
 		return fmt.Errorf("fetching user data: %w", err)
 	}
@@ -99,6 +100,11 @@ func K8sDynamicApply(ctx *cli.Context) error {
 	// Generate deployment script with node type from user data
 	if err := writeK8sDynamicDeployScript(s, k8sConfigDir, userData); err != nil {
 		return fmt.Errorf("writing dynamic deployment script: %w", err)
+	}
+
+	// Write SSH authorized keys from user data
+	if err := writeSSHKeysFromUserData(s, userData); err != nil {
+		return fmt.Errorf("writing SSH keys: %w", err)
 	}
 
 	return nil
@@ -329,6 +335,83 @@ func writeK8sDynamicDeployScript(s *sys.System, k8sConfigDir string, userData *u
 	}
 
 	s.Logger().Info("Deployment script written to %s", scriptPath)
+
+	return nil
+}
+
+// writeSSHKeysFromUserData processes the users section of user data
+// and writes SSH authorized keys to each user's home directory.
+func writeSSHKeysFromUserData(s *sys.System, userData *userdata.UserData) error {
+	if userData == nil || userData.Data == nil {
+		return nil
+	}
+
+	usersRaw, ok := userData.Data["users"].([]any)
+	if !ok || len(usersRaw) == 0 {
+		s.Logger().Info("No users section in user data")
+		return nil
+	}
+
+	for _, userRaw := range usersRaw {
+		userMap, ok := userRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		name, ok := userMap["name"].(string)
+		if !ok || name == "" {
+			continue
+		}
+
+		keysRaw, ok := userMap["ssh_authorized_keys"].([]any)
+		if !ok || len(keysRaw) == 0 {
+			continue
+		}
+
+		// Determine home directory
+		homeDir := "/home/" + name
+		if name == "root" {
+			homeDir = "/root"
+		}
+
+		sshDir := filepath.Join(homeDir, ".ssh")
+		authKeysPath := filepath.Join(sshDir, "authorized_keys")
+
+		// Ensure .ssh directory exists
+		if err := vfs.MkdirAll(s.FS(), sshDir, 0o700); err != nil {
+			return fmt.Errorf("creating .ssh directory for %s: %w", name, err)
+		}
+
+		// Read existing authorized_keys (may exist from Ignition)
+		var existing []byte
+		if data, err := s.FS().ReadFile(authKeysPath); err == nil {
+			existing = data
+		}
+
+		// Append new keys
+		var newKeys []string
+		for _, keyRaw := range keysRaw {
+			if key, ok := keyRaw.(string); ok && key != "" {
+				newKeys = append(newKeys, key)
+			}
+		}
+
+		if len(newKeys) == 0 {
+			continue
+		}
+
+		content := string(existing)
+		if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		content += strings.Join(newKeys, "\n") + "\n"
+
+		if err := s.FS().WriteFile(authKeysPath, []byte(content), 0o600); err != nil {
+			return fmt.Errorf("writing authorized_keys for %s: %w", name, err)
+		}
+
+		s.Logger().Info("Wrote %d SSH key(s) for user %s", len(newKeys), name)
+	}
 
 	return nil
 }
