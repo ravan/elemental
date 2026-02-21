@@ -598,7 +598,7 @@ func WithConfigPartition(size MiB) Opt {
 		Label:      ConfigLabel,
 		MountPoint: ConfigMnt,
 		Role:       Config,
-		FileSystem: Ext4,
+		FileSystem: Btrfs,
 		Size:       size,
 		Hidden:     true,
 	}
