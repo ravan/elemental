@@ -187,7 +187,7 @@ func parseDeployment(
 			Label:      deployment.ConfigLabel,
 			MountPoint: deployment.ConfigMnt,
 			Role:       deployment.Config,
-			FileSystem: deployment.Ext4,
+			FileSystem: deployment.Btrfs,
 			Size:       deployment.MiB(configSize/128)*128 + 256,
 			Hidden:     true,
 		}
