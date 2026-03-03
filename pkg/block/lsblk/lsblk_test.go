@@ -106,6 +106,18 @@ const partsPortionLslbkOut = `,{
          "type": "part"
       }`
 
+const romPortionLsblkOut = `,{
+         "label": "cidata",
+         "size": 368640,
+         "fstype": "iso9660",
+         "mountpoints": [
+             null
+         ],
+         "path": "/dev/sr0",
+         "pkname": "",
+         "type": "rom"
+      }`
+
 func TestLsBlockSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "LsBlock test suite")
@@ -204,6 +216,16 @@ var _ = Describe("BlockDevice", Label("lsblk"), func() {
 			lsblkErr = fmt.Errorf("new lsblk error")
 			_, err := b.GetAllPartitions()
 			Expect(err).To(HaveOccurred())
+		})
+		It("includes rom type devices like cidata ISOs", func() {
+			json = fmt.Sprintf(fullLsblkTmpl, partsPortionLslbkOut, romPortionLsblkOut)
+			pl, err := b.GetAllPartitions()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(pl)).To(Equal(4))
+			part := pl.GetByLabel("cidata")
+			Expect(part).NotTo(BeNil())
+			Expect(part.Path).To(Equal("/dev/sr0"))
+			Expect(part.FileSystem).To(Equal("iso9660"))
 		})
 	})
 	Describe("GetPartitionByLabel", func() {

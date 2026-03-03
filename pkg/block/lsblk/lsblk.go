@@ -74,8 +74,8 @@ func (p *jParts) UnmarshalJSON(data []byte) error {
 
 	var partitions jParts
 	for _, part := range parts {
-		// filter only partition or loop devices
-		if part.Type == "part" || part.Type == "loop" {
+		// filter only partition, loop or rom devices
+		if part.Type == "part" || part.Type == "loop" || part.Type == "rom" {
 			partitions = append(partitions, part.Partition())
 		}
 	}
