@@ -23,6 +23,75 @@ func TestK8sDynamic(t *testing.T) {
 	RunSpecs(t, "K8sDynamic Suite")
 }
 
+var _ = Describe("writeHostnameFromUserData", Label("k8s-dynamic", "hostname"), func() {
+	var (
+		system  *sys.System
+		runner  *sysmock.Runner
+		cleanup func()
+	)
+
+	BeforeEach(func() {
+		fs, c, err := sysmock.TestFS(nil)
+		Expect(err).NotTo(HaveOccurred())
+		cleanup = c
+		runner = sysmock.NewRunner()
+
+		system, err = sys.NewSystem(
+			sys.WithFS(fs),
+			sys.WithLogger(log.New()),
+			sys.WithRunner(runner),
+		)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		cleanup()
+	})
+
+	It("writes hostname to /etc/hostname and applies it via hostnamectl", func() {
+		ud := &userdata.UserData{
+			Data:     map[string]any{"hostname": "node1.example.com"},
+			Provider: "test",
+		}
+
+		err := writeHostnameFromUserData(system, ud)
+		Expect(err).NotTo(HaveOccurred())
+
+		content, err := system.FS().ReadFile("/etc/hostname")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(content)).To(Equal("node1.example.com\n"))
+
+		Expect(runner.IncludesCmds([][]string{
+			{"hostnamectl", "set-hostname", "node1.example.com"},
+		})).To(Succeed())
+	})
+
+	It("does nothing when hostname is not set", func() {
+		ud := &userdata.UserData{
+			Data:     map[string]any{"rke2": map[string]any{"type": "server"}},
+			Provider: "test",
+		}
+
+		err := writeHostnameFromUserData(system, ud)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("does nothing when hostname is empty", func() {
+		ud := &userdata.UserData{
+			Data:     map[string]any{"hostname": ""},
+			Provider: "test",
+		}
+
+		err := writeHostnameFromUserData(system, ud)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("does nothing when user data is nil", func() {
+		err := writeHostnameFromUserData(system, nil)
+		Expect(err).NotTo(HaveOccurred())
+	})
+})
+
 var _ = Describe("writeSSHKeysFromUserData", Label("k8s-dynamic", "ssh"), func() {
 	var (
 		system  *sys.System

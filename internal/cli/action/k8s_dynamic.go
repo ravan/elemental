@@ -78,6 +78,11 @@ func K8sDynamicApply(ctx context.Context, cmd *cli.Command) error {
 
 	s.Logger().Info("User data fetched from provider: %s", userData.Provider)
 
+	// Set hostname from user data (must happen before RKE2 install)
+	if err := writeHostnameFromUserData(s, userData); err != nil {
+		return fmt.Errorf("writing hostname: %w", err)
+	}
+
 	// Find and render all .tpl files in kubernetes config directory
 	// Use absolute path - kubernetes configs are on the system partition, not the config partition
 	k8sConfigDir := filepath.Join("/", image.KubernetesPath())
@@ -336,6 +341,36 @@ func writeK8sDynamicDeployScript(s *sys.System, k8sConfigDir string, userData *u
 
 	s.Logger().Info("Deployment script written to %s", scriptPath)
 
+	return nil
+}
+
+// writeHostnameFromUserData sets the system hostname from user data.
+// It writes the hostname to /etc/hostname if the top-level "hostname" field is present.
+func writeHostnameFromUserData(s *sys.System, userData *userdata.UserData) error {
+	if userData == nil || userData.Data == nil {
+		return nil
+	}
+
+	hostname, ok := userData.Data["hostname"].(string)
+	if !ok || hostname == "" {
+		s.Logger().Info("No hostname in user data")
+		return nil
+	}
+
+	if err := vfs.MkdirAll(s.FS(), "/etc", vfs.DirPerm); err != nil {
+		return fmt.Errorf("creating /etc directory: %w", err)
+	}
+
+	if err := s.FS().WriteFile("/etc/hostname", []byte(hostname+"\n"), 0o644); err != nil {
+		return fmt.Errorf("writing /etc/hostname: %w", err)
+	}
+
+	// Apply hostname to the running system
+	if _, err := s.Runner().Run("hostnamectl", "set-hostname", hostname); err != nil {
+		return fmt.Errorf("setting hostname via hostnamectl: %w", err)
+	}
+
+	s.Logger().Info("Hostname set to %s", hostname)
 	return nil
 }
 

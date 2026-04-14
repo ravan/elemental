@@ -52,6 +52,7 @@ With dynamic configuration, node roles are assigned at **boot time** based on us
 
 ```yaml
 # User data provided at instance launch
+hostname: node1.example.com
 rke2:
   type: server
   init: true
@@ -128,6 +129,7 @@ These fields are processed directly by the k8s-dynamic service:
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
+| `hostname` | No | - | System hostname (top-level field, written to `/etc/hostname`) |
 | `type` | No | `server` | Node type: `server` or `agent` |
 | `init` | No | `false` | Set to `true` for the cluster bootstrap node |
 | `token` | Conditional | - | Cluster token. Required for joining nodes |
@@ -219,6 +221,7 @@ aws ec2 run-instances \
 
 **init-node-userdata.yaml:**
 ```yaml
+hostname: k8s-init.example.com
 rke2:
   type: server
   init: true
@@ -230,6 +233,7 @@ rke2:
 
 **Joining server:**
 ```yaml
+hostname: k8s-server-2.example.com
 rke2:
   type: server
   server: https://10.0.0.100:9345
@@ -238,6 +242,7 @@ rke2:
 
 **Agent:**
 ```yaml
+hostname: k8s-agent-1.example.com
 rke2:
   type: agent
   server: https://10.0.0.100:9345
@@ -251,6 +256,7 @@ Create a cidata ISO with the user data:
 ```shell
 # Create user-data file for init node
 cat > user-data <<EOF
+hostname: k8s-init.example.com
 rke2:
   type: server
   init: true
