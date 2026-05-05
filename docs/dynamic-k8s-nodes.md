@@ -298,8 +298,9 @@ qemu-system-x86_64 \
 2. **User Data Fetch:** `elemental-k8s-dynamic.service` fetches user data from cloud provider (AWS IMDS, etc.)
 3. **Config Generation:** RKE2 config file (`init.yaml`, `server.yaml`, or `agent.yaml`) is generated from user data
 4. **Deploy Script:** Dynamic deployment script is generated with correct node type and config filename
-5. **Config Installation:** `k8s-config-installer.service` runs the deployment script
-6. **RKE2 Start:** The appropriate RKE2 service (`rke2-server` or `rke2-agent`) is enabled and started
+5. **Config Installation:** `k8s-config-installer.service` runs the deployment script and copies the generated config to `/etc/rancher/rke2/config.yaml`
+6. **RKE2 Installation:** The deployment script installs RKE2 from the embedded artifacts under `/opt/k8s/install`
+7. **RKE2 Start:** The appropriate RKE2 service (`rke2-server` or `rke2-agent`) is enabled and started
 
 ## Troubleshooting
 
@@ -329,6 +330,9 @@ cat /var/lib/elemental/kubernetes/init.yaml    # or server.yaml, agent.yaml
 
 # Generated deploy script
 cat /var/lib/elemental/kubernetes/k8s_conf_deploy.sh
+
+# Embedded RKE2 installer and artifacts used by the deploy script
+ls -la /opt/k8s/install/
 ```
 
 ### Common Issues
@@ -346,6 +350,11 @@ cat /var/lib/elemental/kubernetes/k8s_conf_deploy.sh
 - Verify network connectivity to the init node
 - Check firewall rules allow port 9345
 - Ensure the init node is ready before joining
+
+**RKE2 installation failed:**
+- Check `journalctl -u k8s-config-installer.service`
+- Verify `/opt/k8s/install/install.sh` exists
+- Verify embedded RKE2 artifacts are present under `/opt/k8s/install`
 
 ## See Also
 

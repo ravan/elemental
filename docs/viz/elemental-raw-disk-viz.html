@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elemental Raw Disk Composition — Configuration Explorer</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #a78bfa;
+    --green: #4ade80;
+    --orange: #fb923c;
+    --red: #f87171;
+    --pink: #f472b6;
+    --yellow: #facc15;
+    --cyan: #22d3ee;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+  h1 { font-size: 1.5rem; color: var(--accent); margin-bottom: 0.25rem; }
+  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+  .panel-title { font-size: 0.95rem; color: var(--accent); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .panel-title .icon { font-size: 1.1rem; }
+
+  /* ── YAML Editor ── */
+  .yaml-area { width: 100%; min-height: 300px; background: #0c1322; color: var(--green); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; font-family: inherit; font-size: 0.82rem; line-height: 1.6; resize: vertical; outline: none; }
+  .yaml-area:focus { border-color: var(--accent); }
+
+  /* ── Disk visualization ── */
+  .disk-wrap { position: relative; margin: 1rem 0; }
+  .disk-bar { display: flex; height: 56px; border-radius: 8px; overflow: hidden; border: 2px solid var(--border); background: #0c1322; }
+  .disk-seg { display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; color: #000; transition: all 0.3s; cursor: pointer; position: relative; }
+  .disk-seg:hover { filter: brightness(1.2); transform: scaleY(1.08); }
+  .disk-seg .seg-label { pointer-events: none; text-align: center; line-height: 1.2; }
+
+  .disk-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* ── Config fields table ── */
+  .field-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .field-table th { text-align: left; padding: 0.5rem 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); font-weight: 600; }
+  .field-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #1a2744; vertical-align: top; }
+  .field-table tr:hover td { background: rgba(56, 189, 248, 0.05); }
+  .tag { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+  .tag-required { background: rgba(248, 113, 113, 0.2); color: var(--red); }
+  .tag-optional { background: rgba(74, 222, 128, 0.2); color: var(--green); }
+  .tag-type { background: rgba(167, 139, 250, 0.2); color: var(--accent2); }
+
+  /* ── Flow diagram ── */
+  .flow { display: flex; flex-direction: column; gap: 0; align-items: center; }
+  .flow-step { background: #0c1322; border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1.25rem; width: 100%; max-width: 420px; position: relative; transition: border-color 0.2s; }
+  .flow-step:hover { border-color: var(--accent); }
+  .flow-step .step-num { position: absolute; left: -12px; top: 50%; transform: translateY(-50%); background: var(--accent); color: var(--bg); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; }
+  .flow-step .step-title { font-size: 0.82rem; color: var(--accent); font-weight: 600; }
+  .flow-step .step-desc { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
+  .flow-step .step-code { font-size: 0.7rem; color: var(--orange); margin-top: 0.3rem; background: rgba(251, 146, 60, 0.08); padding: 0.2rem 0.5rem; border-radius: 4px; }
+  .flow-arrow { width: 2px; height: 24px; background: var(--border); position: relative; }
+  .flow-arrow::after { content: '▼'; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); color: var(--border); font-size: 0.6rem; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 0; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+  .tab-btn { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 0.8rem; padding: 0.5rem 1rem; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Tooltip ── */
+  .tooltip { position: fixed; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.75rem; color: var(--text); pointer-events: none; z-index: 100; max-width: 280px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: none; }
+  .tooltip .tt-title { color: var(--accent); font-weight: 600; margin-bottom: 0.3rem; }
+  .tooltip .tt-detail { color: var(--muted); line-height: 1.4; }
+
+  .size-display { text-align: center; margin-top: 0.5rem; }
+  .size-display .size-val { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
+  .size-display .size-label { font-size: 0.75rem; color: var(--muted); }
+
+  .full-width { grid-column: 1 / -1; }
+
+  .example-btns { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .example-btn { background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); color: var(--accent); font-family: inherit; font-size: 0.72rem; padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+  .example-btn:hover { background: rgba(56, 189, 248, 0.2); border-color: var(--accent); }
+  .example-btn.active { background: var(--accent); color: var(--bg); }
+
+  .validation-msg { font-size: 0.75rem; margin-top: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 6px; }
+  .validation-ok { background: rgba(74, 222, 128, 0.1); color: var(--green); border: 1px solid rgba(74, 222, 128, 0.3); }
+  .validation-err { background: rgba(248, 113, 113, 0.1); color: var(--red); border: 1px solid rgba(248, 113, 113, 0.3); }
+
+  .struct-block { background: #0c1322; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; font-size: 0.75rem; line-height: 1.7; overflow-x: auto; }
+  .kw { color: var(--accent2); }
+  .tp { color: var(--cyan); }
+  .tg { color: var(--orange); }
+  .cm { color: #475569; }
+</style>
+</head>
+<body>
+
+<h1>Elemental Raw Disk Composition</h1>
+<p class="subtitle">Interactive explorer for <code>install.yaml</code> configuration options — SUSE Elemental v3 / UC 0.6</p>
+
+<div class="layout">
+
+  <!-- LEFT: YAML Editor + Disk Viz -->
+  <div>
+    <div class="panel">
+      <div class="panel-title"><span class="icon">📝</span> install.yaml — Live Editor</div>
+
+      <div class="example-btns">
+        <button class="example-btn active" onclick="loadExample('single', this)">Single-Node (35G)</button>
+        <button class="example-btn" onclick="loadExample('linux', this)">Linux-Only (8G)</button>
+        <button class="example-btn" onclick="loadExample('dynamic', this)">Dynamic Node</button>
+        <button class="example-btn" onclick="loadExample('iso', this)">ISO Mode</button>
+      </div>
+
+      <textarea class="yaml-area" id="yamlEditor" spellcheck="false"></textarea>
+      <div id="validationMsg"></div>
+    </div>
+
+    <div class="panel" style="margin-top: 1.5rem;">
+      <div class="panel-title"><span class="icon">💾</span> Resulting Disk Layout</div>
+      <div class="size-display">
+        <div class="size-val" id="totalSize">35G</div>
+        <div class="size-label">Customized RAW disk size; build RAW defaults differ</div>
+      </div>
+      <div class="disk-wrap">
+        <div class="disk-bar" id="diskBar"></div>
+      </div>
+      <div class="disk-legend" id="diskLegend"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Tabs for different views -->
+  <div>
+    <div class="panel" style="height: 100%;">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('fields', this)">Config Fields</button>
+        <button class="tab-btn" onclick="switchTab('structs', this)">Go Structs</button>
+        <button class="tab-btn" onclick="switchTab('flow', this)">Build Flow</button>
+      </div>
+
+      <div class="tab-content active" id="tab-fields">
+        <table class="field-table">
+          <thead>
+            <tr><th>Field</th><th>Type</th><th>Info</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>schema</code></td>
+              <td><span class="tag tag-type">string</span></td>
+              <td><span class="tag tag-required">required</span><br>Configuration schema version. Current examples use <code>v0</code></td>
+            </tr>
+            <tr>
+              <td><code>bootloader</code></td>
+              <td><span class="tag tag-type">string</span></td>
+              <td><span class="tag tag-required">required</span><br>Boot loader: <code>grub</code> or <code>none</code></td>
+            </tr>
+            <tr>
+              <td><code>kernelCmdLine</code></td>
+              <td><span class="tag tag-type">string</span></td>
+              <td><span class="tag tag-optional">optional</span><br>Extra kernel boot parameters appended after essential params</td>
+            </tr>
+            <tr>
+              <td><code>serialConsole</code></td>
+              <td><span class="tag tag-type">bool</span></td>
+              <td><span class="tag tag-optional">optional</span><br>Enable serial console output for the bootloader</td>
+            </tr>
+            <tr>
+              <td><code>cryptoPolicy</code></td>
+              <td><span class="tag tag-type">string</span></td>
+              <td><span class="tag tag-optional">optional</span><br>Crypto policy: <code>fips</code> or <code>default</code>. When <code>fips</code>, appends FIPS kernel cmdline args</td>
+            </tr>
+            <tr>
+              <td style="padding-left: 1.5rem;"><code>raw.diskSize</code></td>
+              <td><span class="tag tag-type">DiskSize</span></td>
+              <td>
+                <span class="tag tag-required">required*</span><br>
+                Size of the raw disk image.<br>
+                Pattern: <code>^[1-9]\d*[KMGT]$</code><br>
+                Defaults: <code>10G</code> (build) / <code>12G</code> (customize)
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-left: 1.5rem;"><code>iso.device</code></td>
+              <td><span class="tag tag-type">string</span></td>
+              <td><span class="tag tag-required">required†</span><br>Target install disk for ISO mode, e.g. <code>/dev/sda</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="font-size: 0.7rem; color: var(--muted); margin-top: 1rem;">
+          * Required when image type is <code>raw</code> if you do not want the command default. Falls back to 10G for <code>elemental3 build</code> and 12G for <code>elemental3 customize --type raw</code>.<br>
+          † Required when image type is <code>iso</code>. Mutually exclusive with <code>raw</code>.
+        </p>
+      </div>
+
+      <div class="tab-content" id="tab-structs">
+        <div class="struct-block">
+<span class="cm">// internal/image/install/install.go</span>
+
+<span class="kw">type</span> <span class="tp">DiskSize</span> <span class="tp">string</span>
+
+<span class="kw">func</span> (d DiskSize) <span class="tp">IsValid</span>() <span class="tp">bool</span> {
+    <span class="kw">return</span> regexp.MustCompile(
+        <span class="tg">`^[1-9]\d*[KMGT]$`</span>
+    ).MatchString(string(d))
+}
+
+<span class="cm">// ToMiB converts K → KiB, M → MiB, G → GiB, T → TiB</span>
+<span class="kw">func</span> (d DiskSize) <span class="tp">ToMiB</span>() (<span class="tp">uint</span>, <span class="tp">error</span>) { ... }
+
+<span class="kw">type</span> <span class="tp">Installation</span> <span class="kw">struct</span> {
+    SchemaVersion <span class="tp">string</span>        <span class="tg">`yaml:"schema"`</span>
+    Bootloader    <span class="tp">string</span>        <span class="tg">`yaml:"bootloader"
+                                  validate:"omitempty,oneof=grub none"`</span>
+    KernelCmdLine <span class="tp">string</span>        <span class="tg">`yaml:"kernelCmdLine"`</span>
+    SerialConsole <span class="tp">bool</span>          <span class="tg">`yaml:"serialConsole"`</span>
+    RAW           <span class="tp">RAW</span>           <span class="tg">`yaml:"raw"`</span>
+    ISO           <span class="tp">ISO</span>           <span class="tg">`yaml:"iso"`</span>
+    CryptoPolicy  <span class="tp">crypto.Policy</span> <span class="tg">`yaml:"cryptoPolicy"
+                                  validate:"omitempty,oneof=fips default"`</span>
+}
+
+<span class="kw">type</span> <span class="tp">RAW</span> <span class="kw">struct</span> {
+    DiskSize <span class="tp">DiskSize</span> <span class="tg">`yaml:"diskSize"
+                        validate:"omitempty,disksize"`</span>
+}
+
+<span class="kw">type</span> <span class="tp">ISO</span> <span class="kw">struct</span> {
+    Device <span class="tp">string</span> <span class="tg">`yaml:"device"`</span>
+}
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-flow">
+        <div class="flow" id="flowDiagram"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM: Full-width flow for Build vs Customize -->
+  <div class="panel full-width">
+    <div class="panel-title"><span class="icon">🔀</span> Two Paths: Build vs Customize</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div>
+        <h3 style="color: var(--green); font-size: 0.9rem; margin-bottom: 0.75rem;">elemental3 build (RAW default: 10G)</h3>
+        <div class="flow" id="buildFlow"></div>
+      </div>
+      <div>
+        <h3 style="color: var(--orange); font-size: 0.9rem; margin-bottom: 0.75rem;">elemental3 customize --type raw (default: 12G)</h3>
+        <div class="flow" id="customizeFlow"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="tt-title"></div>
+  <div class="tt-detail"></div>
+</div>
+
+<script>
+const examples = {
+  single: `schema: v0
+bootloader: grub
+kernelCmdLine: "console=ttyS0 loglevel=3"
+# If you are using this configuration outside of the example documentation,
+# ensure that all cluster nodes are FIPS-ready. Otherwise, remove this property.
+cryptoPolicy: fips
+raw:
+  diskSize: 35G
+# Alternatively for ISO:
+# iso:
+#   device: "/dev/sda"`,
+
+  linux: `schema: v0
+bootloader: grub
+kernelCmdLine: "console=ttyS0 loglevel=3"
+# If you are using this configuration outside of the example documentation,
+# ensure that your operating system is FIPS-ready. Otherwise, remove this property.
+cryptoPolicy: fips
+raw:
+  diskSize: 8G`,
+
+  dynamic: `schema: v0
+bootloader: grub
+kernelCmdLine: "console=ttyS0 quiet loglevel=3"
+raw:
+  diskSize: 35G`,
+
+  iso: `schema: v0
+bootloader: grub
+kernelCmdLine: "console=ttyS0 loglevel=3"
+cryptoPolicy: fips
+iso:
+  device: "/dev/sda"`
+};
+
+const partitions = [
+  { name: 'EFI', size: 1024, color: '#38bdf8', desc: 'EFI System Partition — GRUB bootloader, EFI binaries. Label: EFI, Mount: /boot, FS: vfat' },
+  { name: 'RECOVERY', size: null, color: '#a78bfa', desc: 'Recovery partition — installer/recovery assets from the base ISO. Label: RECOVERY. Present in customized RAW media, not in the direct elemental3 build default deployment.' },
+  { name: 'IGNITION', size: 256, color: '#fb923c', desc: 'Firstboot configuration partition (hidden) — Ignition, network, custom, and Kubernetes setup. Label: ignition, Mount: /run/elemental/firstboot, FS: btrfs. Only created if firstboot config exists.' },
+  { name: 'SYSTEM', size: null, color: '#4ade80', desc: 'System partition — the actual OS root. Label: SYSTEM, Mount: /, FS: btrfs. Always last partition, takes all remaining space.' }
+];
+
+function parseYAML(text) {
+  const result = { bootloader: '', kernelCmdLine: '', serialConsole: false, cryptoPolicy: '', raw: { diskSize: '' }, iso: { device: '' } };
+  const lines = text.split('\n');
+  let inRaw = false, inISO = false;
+  for (const line of lines) {
+    const trimmed = line.replace(/#.*/, '').trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('raw:')) { inRaw = true; inISO = false; continue; }
+    if (trimmed.startsWith('iso:')) { inISO = true; inRaw = false; continue; }
+    if (!trimmed.startsWith(' ') && !trimmed.startsWith('\t') && !trimmed.startsWith('-')) { inRaw = false; inISO = false; }
+
+    const m = trimmed.match(/^(\w+):\s*"?([^"]*)"?\s*$/);
+    if (!m) continue;
+    const [, key, val] = m;
+
+    if (inRaw && key === 'diskSize') result.raw.diskSize = val;
+    else if (inISO && key === 'device') result.iso.device = val;
+    else if (key === 'bootloader') result.bootloader = val;
+    else if (key === 'kernelCmdLine') result.kernelCmdLine = val;
+    else if (key === 'serialConsole') result.serialConsole = val === 'true';
+    else if (key === 'cryptoPolicy') result.cryptoPolicy = val;
+  }
+  return result;
+}
+
+function validateDiskSize(s) {
+  if (!s) return { valid: true, msg: 'No diskSize — will use default (10G build / 12G customize)' };
+  return /^[1-9]\d*[KMGT]$/.test(s)
+    ? { valid: true, msg: `Valid diskSize: ${s}` }
+    : { valid: false, msg: `Invalid diskSize "${s}" — must match ^[1-9]\\d*[KMGT]$` };
+}
+
+function parseSizeToMiB(s) {
+  if (!s) return 10 * 1024;
+  const num = parseInt(s);
+  const unit = s.slice(-1).toUpperCase();
+  const mult = { K: 1/1024, M: 1, G: 1024, T: 1024*1024 };
+  return num * (mult[unit] || 1024);
+}
+
+function formatSize(mib) {
+  if (mib >= 1024 * 1024) return (mib / (1024*1024)).toFixed(1) + 'T';
+  if (mib >= 1024) return (mib / 1024).toFixed(0) + 'G';
+  return mib + 'M';
+}
+
+function updateDiskViz(config) {
+  const isISO = config.iso.device && !config.raw.diskSize;
+  const totalMiB = parseSizeToMiB(config.raw.diskSize);
+  const totalLabel = config.raw.diskSize || '10G';
+
+  document.getElementById('totalSize').textContent = isISO ? 'ISO Mode' : totalLabel;
+
+  const bar = document.getElementById('diskBar');
+  const legend = document.getElementById('diskLegend');
+
+  if (isISO) {
+    bar.innerHTML = '<div class="disk-seg" style="width:100%;background:linear-gradient(135deg,#38bdf8,#a78bfa)"><div class="seg-label">ISO → ' + config.iso.device + '</div></div>';
+    legend.innerHTML = '<div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>ISO installs directly to ' + config.iso.device + '</div>';
+    return;
+  }
+
+  const efiMiB = 1024;
+  const ignitionMiB = 256;
+  const recoveryMiB = Math.max(1500, totalMiB * 0.15);
+  const systemMiB = totalMiB - efiMiB - ignitionMiB - recoveryMiB;
+
+  const parts = [
+    { name: 'EFI', mib: efiMiB, color: '#38bdf8' },
+    { name: 'RECOVERY', mib: recoveryMiB, color: '#a78bfa' },
+    { name: 'IGNITION', mib: ignitionMiB, color: '#fb923c' },
+    { name: 'SYSTEM', mib: Math.max(systemMiB, 500), color: '#4ade80' }
+  ];
+
+  const total = parts.reduce((s, p) => s + p.mib, 0);
+  bar.innerHTML = parts.map(p => {
+    const pct = (p.mib / total * 100).toFixed(1);
+    return `<div class="disk-seg" style="width:${pct}%;background:${p.color}" data-part="${p.name}" onmouseenter="showPartTip(event,'${p.name}',${p.mib})" onmouseleave="hideTip()">
+      <div class="seg-label">${p.name}<br>${formatSize(p.mib)}</div>
+    </div>`;
+  }).join('');
+
+  legend.innerHTML = parts.map(p =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${p.color}"></div>${p.name} — ${formatSize(p.mib)}</div>`
+  ).join('');
+}
+
+function showPartTip(e, name, mib) {
+  const descs = {
+    EFI: 'EFI System Partition\nLabel: EFI | Mount: /boot | FS: vfat\nFixed size: 1024 MiB\nContains GRUB bootloader & EFI binaries',
+    RECOVERY: 'Recovery Partition\nLabel: RECOVERY\nPresent in customized RAW media inherited from the installer ISO\nContains installer/recovery assets',
+    IGNITION: 'Firstboot Configuration Partition (hidden)\nLabel: ignition | Mount: /run/elemental/firstboot | FS: btrfs\nSize: aligned to 128 MiB blocks + 256 MiB\nOnly present if firstboot config exists',
+    SYSTEM: 'System Partition (always last)\nLabel: SYSTEM | Mount: / | FS: btrfs\nTakes ALL remaining disk space\nContains the actual operating system root'
+  };
+  const tt = document.getElementById('tooltip');
+  tt.querySelector('.tt-title').textContent = name + ' — ' + formatSize(mib);
+  tt.querySelector('.tt-detail').textContent = descs[name] || '';
+  tt.style.display = 'block';
+  tt.style.left = e.clientX + 12 + 'px';
+  tt.style.top = e.clientY - 10 + 'px';
+}
+function hideTip() { document.getElementById('tooltip').style.display = 'none'; }
+
+function update() {
+  const text = document.getElementById('yamlEditor').value;
+  const config = parseYAML(text);
+  const v = validateDiskSize(config.raw.diskSize);
+  const msgEl = document.getElementById('validationMsg');
+  msgEl.innerHTML = `<div class="validation-msg ${v.valid ? 'validation-ok' : 'validation-err'}">${v.valid ? '✓' : '✗'} ${v.msg}</div>`;
+  updateDiskViz(config);
+}
+
+function loadExample(name, btn) {
+  document.querySelectorAll('.example-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('yamlEditor').value = examples[name];
+  update();
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// Build flow steps
+function renderFlow(containerId, steps) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = steps.map((s, i) => {
+    let html = `<div class="flow-step"><div class="step-num">${i + 1}</div><div class="step-title">${s.title}</div><div class="step-desc">${s.desc}</div>`;
+    if (s.code) html += `<div class="step-code">${s.code}</div>`;
+    html += '</div>';
+    if (i < steps.length - 1) html += '<div class="flow-arrow"></div>';
+    return html;
+  }).join('');
+}
+
+// Main flow (tab)
+renderFlow('flowDiagram', [
+  { title: 'Parse install.yaml', desc: 'Load Installation struct from YAML config', code: 'yaml.Unmarshal(data, &Installation{})' },
+  { title: 'Validate diskSize', desc: 'Check regex: ^[1-9]\\d*[KMGT]$', code: 'DiskSize.IsValid()' },
+  { title: 'Convert to MiB', desc: 'K→KiB, M→MiB, G→GiB, T→TiB then ÷ MiB', code: 'DiskSize.ToMiB()' },
+  { title: 'Create Deployment', desc: 'Build partition table from the selected path: build uses EFI → optional ignition → SYSTEM; customize raw starts from EFI → RECOVERY → optional ignition → SYSTEM', code: 'deployment.New(opts...)' },
+  { title: 'Apply Boot Config', desc: 'Set bootloader, kernel cmdline, FIPS if needed', code: 'd.BootConfig = &BootConfig{...}' },
+  { title: 'Create Disk Image', desc: 'Allocate the raw image and apply the deployment partition model', code: 'truncate / repart / installer' }
+]);
+
+// Build path
+renderFlow('buildFlow', [
+  { title: 'Create sparse disk file', desc: 'Allocates a sparse file of the given diskSize, defaulting to 10G', code: 'truncate -s 10G output.raw' },
+  { title: 'Attach loop device', desc: 'Maps the raw file as a block device', code: 'losetup -f --show output.raw' },
+  { title: 'Build deployment', desc: 'Create direct RAW layout with EFI + SYSTEM, plus an ignition partition when firstboot config exists', code: 'deployment.New(WithConfigPartition(...))' },
+  { title: 'Install OS', desc: 'Unpack OS image, install bootloader, write deployment', code: 'installer.Install(dep)' },
+  { title: 'Detach device', desc: 'Release the loop device', code: 'losetup -d /dev/loopN' }
+]);
+
+// Customize path
+renderFlow('customizeFlow', [
+  { title: 'Extract ISO from OCI', desc: 'Pull container image with the base ISO', code: 'FileExtractor.ExtractFrom(containerImage)' },
+  { title: 'Load install description', desc: 'Read partition layout embedded in ISO', code: 'LoadISOInstallDesc(...)' },
+  { title: 'Parse media & diskSize', desc: 'Validate diskSize, convert to MiB, default 12G', code: 'WithRawDiskSize(deployment.MiB(diskMiB))' },
+  { title: 'Merge deployments', desc: 'Start from ISO installer layout and insert the optional ignition partition before SYSTEM', code: 'deployment.Merge(base, custom)' },
+  { title: 'Create disk via media customizer', desc: 'Build final image: EFI + RECOVERY + optional ignition + SYSTEM', code: 'Media.Customize(dep)' },
+  { title: 'Write checksum', desc: 'Generate SHA-256 checksum file', code: 'output.raw.sha256' }
+]);
+
+// Init
+document.getElementById('yamlEditor').value = examples.single;
+document.getElementById('yamlEditor').addEventListener('input', update);
+update();
+</script>
+
+</body>
+</html>
