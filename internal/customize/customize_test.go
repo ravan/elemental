@@ -204,7 +204,7 @@ disks:
 			Label:      deployment.ConfigLabel,
 			MountPoint: deployment.ConfigMnt,
 			Role:       deployment.Config,
-			FileSystem: deployment.Ext4,
+			FileSystem: deployment.Btrfs,
 			Size:       256,
 			Hidden:     true,
 		}))

@@ -6,8 +6,6 @@ SPDX-License-Identifier: Apache-2.0
 package action
 
 import (
-	"testing"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -17,11 +15,6 @@ import (
 	"github.com/suse/elemental/v3/pkg/sys/vfs"
 	"github.com/suse/elemental/v3/pkg/userdata"
 )
-
-func TestK8sDynamic(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "K8sDynamic Suite")
-}
 
 var _ = Describe("writeHostnameFromUserData", Label("k8s-dynamic", "hostname"), func() {
 	var (

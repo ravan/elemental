@@ -60,6 +60,7 @@ var _ = Describe("Grub tests", Label("bootloader", "grub"), func() {
 			sys.WithFS(tfs),
 			sys.WithLogger(log.New(log.WithDiscardAll())),
 			sys.WithMounter(mounter),
+			sys.WithPlatform("linux/amd64"),
 		)
 		Expect(err).NotTo(HaveOccurred())
 
