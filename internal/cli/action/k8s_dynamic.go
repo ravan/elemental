@@ -320,6 +320,8 @@ func writeK8sDynamicDeployScript(s *sys.System, k8sConfigDir string, userData *u
 		APIVIP4        string
 		APIVIP6        string
 		APIHost        string
+		InstallPath    string
+		InstallScript  string
 	}{
 		NodeType:       nodeType,
 		KubernetesDir:  k8sConfigDir,
@@ -327,6 +329,8 @@ func writeK8sDynamicDeployScript(s *sys.System, k8sConfigDir string, userData *u
 		APIVIP4:        apiVIP4,
 		APIVIP6:        apiVIP6,
 		APIHost:        apiHost,
+		InstallPath:    filepath.Join("/", image.KubernetesInstallPath()),
+		InstallScript:  filepath.Join("/", image.KubernetesInstallPath(), "install.sh"),
 	}
 
 	data, err := template.Parse(k8sConfDeployDynamicScriptName, config.K8sConfDeployDynamicScriptTpl, &values)

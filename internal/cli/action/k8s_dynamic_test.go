@@ -219,3 +219,52 @@ var _ = Describe("writeSSHKeysFromUserData", Label("k8s-dynamic", "ssh"), func()
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
+
+var _ = Describe("writeK8sDynamicDeployScript", Label("k8s-dynamic", "deploy-script"), func() {
+	var (
+		system  *sys.System
+		cleanup func()
+	)
+
+	BeforeEach(func() {
+		fs, c, err := sysmock.TestFS(nil)
+		Expect(err).NotTo(HaveOccurred())
+		cleanup = c
+
+		system, err = sys.NewSystem(
+			sys.WithFS(fs),
+			sys.WithLogger(log.New()),
+		)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		cleanup()
+	})
+
+	It("installs embedded RKE2 artifacts before enabling the node service", func() {
+		ud := &userdata.UserData{
+			Data: map[string]any{
+				"rke2": map[string]any{
+					"type":  "server",
+					"init":  true,
+					"token": "test-token",
+				},
+			},
+			Provider: "test",
+		}
+
+		err := writeK8sDynamicDeployScript(system, "/var/lib/elemental/kubernetes", ud)
+		Expect(err).NotTo(HaveOccurred())
+
+		content, err := system.FS().ReadFile("/var/lib/elemental/kubernetes/k8s_conf_deploy.sh")
+		Expect(err).NotTo(HaveOccurred())
+		script := string(content)
+
+		Expect(script).To(ContainSubstring("export INSTALL_RKE2_ARTIFACT_PATH=\"/opt/k8s/install\""))
+		Expect(script).To(ContainSubstring("sh \"/opt/k8s/install/install.sh\""))
+		Expect(script).To(ContainSubstring("NODETYPE=\"server\""))
+		Expect(script).To(ContainSubstring("systemctl enable --now rke2-${NODETYPE}.service"))
+		Expect(script).To(MatchRegexp(`(?s)sh "/opt/k8s/install/install\.sh".*systemctl enable --now rke2-\$\{NODETYPE\}\.service`))
+	})
+})
