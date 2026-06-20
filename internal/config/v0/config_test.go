@@ -48,6 +48,7 @@ kernelCmdLine: "console=ttyS0 quiet loglevel=3"
 cryptoPolicy: fips
 raw:
   diskSize: 35G
+  systemDiskSize: 80G
 iso:
   device: /dev/sda
 `
@@ -128,6 +129,7 @@ var _ = Describe("Configuration", Label("configuration"), func() {
 		Expect(conf.Installation.Bootloader).To(Equal("grub"))
 		Expect(conf.Installation.KernelCmdLine).To(Equal("console=ttyS0 quiet loglevel=3"))
 		Expect(conf.Installation.RAW.DiskSize).To(Equal(install.DiskSize("35G")))
+		Expect(conf.Installation.RAW.SystemDiskSize).To(Equal(install.DiskSize("80G")))
 		Expect(conf.Installation.ISO.Device).To(Equal("/dev/sda"))
 		Expect(conf.Installation.CryptoPolicy).To(Equal(crypto.FIPSPolicy))
 
@@ -322,6 +324,7 @@ schema: v0
 bootloader: invalid
 raw:
   diskSize: 35X
+  systemDiskSize: 35X
 `
 		Expect(fs.WriteFile(installFile, []byte(invalidInstallYAML), 0644)).To(Succeed())
 
@@ -330,6 +333,7 @@ raw:
 		Expect(err.Error()).To(ContainSubstring("validating configuration"))
 		Expect(err.Error()).To(ContainSubstring("field \"Configuration.Installation.Bootloader\" must be one of [grub none], but got \"invalid\""))
 		Expect(err.Error()).To(ContainSubstring("field \"Configuration.Installation.RAW.DiskSize\" must be a valid disk size (e.g., 10G, 500M), but got \"35X\""))
+		Expect(err.Error()).To(ContainSubstring("field \"Configuration.Installation.RAW.SystemDiskSize\" must be a valid disk size (e.g., 10G, 500M), but got \"35X\""))
 	})
 
 	It("Fails on missing required release configuration", func() {
@@ -484,7 +488,8 @@ var _ = Describe("Write", Label("configuration", "write"), func() {
 				Bootloader:    "grub",
 				CryptoPolicy:  crypto.FIPSPolicy,
 				RAW: install.RAW{
-					DiskSize: "35G",
+					DiskSize:       "35G",
+					SystemDiskSize: "80G",
 				},
 			},
 			Release: release.Release{
@@ -516,6 +521,7 @@ var _ = Describe("Write", Label("configuration", "write"), func() {
 		Expect(parsed.Installation.Bootloader).To(Equal("grub"))
 		Expect(parsed.Installation.CryptoPolicy).To(Equal(crypto.FIPSPolicy))
 		Expect(parsed.Installation.RAW.DiskSize).To(Equal(install.DiskSize("35G")))
+		Expect(parsed.Installation.RAW.SystemDiskSize).To(Equal(install.DiskSize("80G")))
 		Expect(parsed.Release.ManifestURI).To(Equal("oci://registry.example.com/roundtrip:1.0"))
 		Expect(parsed.Release.Components.SystemdExtensions).To(HaveLen(1))
 		Expect(parsed.Release.Components.SystemdExtensions[0].Name).To(Equal("rke2"))

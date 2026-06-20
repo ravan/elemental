@@ -510,14 +510,15 @@ schema: v0
 bootloader: grub
 kernelCmdLine: "console=ttyS0 loglevel=3 ignition.platform.id=openstack"
 raw:
- diskSize: 12G
+ diskSize: 8G
+ systemDiskSize: 80G
 ```
 
 That parameter instructs CAPM3 to look for the [Ignition](https://coreos.github.io/ignition/supported-platforms/) configuration within a specific partition on the disk, which serves as a config drive, labeled as *config-2*, included by the internal implementation of the components leveraged by this provider.
 
 In case you were wondering, this is also how you can leverage other CAPI infrastructure providers which are expecting Ignition from a different source\!
 
-Finally, the `diskSize` value can be lowered to reduce the transfer effort.
+Finally, `raw.diskSize` is the **RAW Artifact Size** and can be lowered to reduce the transfer effort. `raw.systemDiskSize` is the **System Disk Target Size** expected from the provider after import. When it is set, Elemental enables initramfs SYSTEM autogrow through the internal `elemental.system_autogrow=1` implementation detail; Elemental grows to the actual block device capacity and does not enforce `raw.systemDiskSize` as an exact guest size.
 
 ## Execution
 

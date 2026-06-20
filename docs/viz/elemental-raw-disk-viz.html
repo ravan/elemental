@@ -184,13 +184,21 @@
               <td><span class="tag tag-type">DiskSize</span></td>
               <td>
                 <span class="tag tag-required">required*</span><br>
-                Size of the raw disk image.<br>
+                <strong>RAW Artifact Size</strong> produced by Elemental.<br>
                 Pattern: <code>^[1-9]\d*[KMGT]$</code><br>
                 Defaults: <code>10G</code> (build) / <code>12G</code> (customize)
-              </td>
-            </tr>
-            <tr>
-              <td style="padding-left: 1.5rem;"><code>iso.device</code></td>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-left: 1.5rem;"><code>raw.systemDiskSize</code></td>
+            <td><span class="tag tag-type">DiskSize</span></td>
+            <td>
+              <span class="tag tag-optional">optional</span><br>
+              <strong>System Disk Target Size</strong> expected from provider expansion. Elemental builds RAW Artifact Size -&gt; provider expands virtual disk -&gt; initramfs autogrow expands SYSTEM.
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-left: 1.5rem;"><code>iso.device</code></td>
               <td><span class="tag tag-type">string</span></td>
               <td><span class="tag tag-required">required†</span><br>Target install disk for ISO mode, e.g. <code>/dev/sda</code></td>
             </tr>
@@ -277,7 +285,8 @@ kernelCmdLine: "console=ttyS0 loglevel=3"
 # ensure that all cluster nodes are FIPS-ready. Otherwise, remove this property.
 cryptoPolicy: fips
 raw:
-  diskSize: 35G
+  diskSize: 8G
+  systemDiskSize: 80G
 # Alternatively for ISO:
 # iso:
 #   device: "/dev/sda"`,
@@ -289,13 +298,15 @@ kernelCmdLine: "console=ttyS0 loglevel=3"
 # ensure that your operating system is FIPS-ready. Otherwise, remove this property.
 cryptoPolicy: fips
 raw:
-  diskSize: 8G`,
+  diskSize: 8G
+  systemDiskSize: 80G`,
 
   dynamic: `schema: v0
 bootloader: grub
 kernelCmdLine: "console=ttyS0 quiet loglevel=3"
 raw:
-  diskSize: 35G`,
+  diskSize: 8G
+  systemDiskSize: 18G`,
 
   iso: `schema: v0
 bootloader: grub
@@ -313,7 +324,7 @@ const partitions = [
 ];
 
 function parseYAML(text) {
-  const result = { bootloader: '', kernelCmdLine: '', serialConsole: false, cryptoPolicy: '', raw: { diskSize: '' }, iso: { device: '' } };
+  const result = { bootloader: '', kernelCmdLine: '', serialConsole: false, cryptoPolicy: '', raw: { diskSize: '', systemDiskSize: '' }, iso: { device: '' } };
   const lines = text.split('\n');
   let inRaw = false, inISO = false;
   for (const line of lines) {
@@ -328,6 +339,7 @@ function parseYAML(text) {
     const [, key, val] = m;
 
     if (inRaw && key === 'diskSize') result.raw.diskSize = val;
+    if (inRaw && key === 'systemDiskSize') result.raw.systemDiskSize = val;
     else if (inISO && key === 'device') result.iso.device = val;
     else if (key === 'bootloader') result.bootloader = val;
     else if (key === 'kernelCmdLine') result.kernelCmdLine = val;
@@ -453,11 +465,11 @@ function renderFlow(containerId, steps) {
 // Main flow (tab)
 renderFlow('flowDiagram', [
   { title: 'Parse install.yaml', desc: 'Load Installation struct from YAML config', code: 'yaml.Unmarshal(data, &Installation{})' },
-  { title: 'Validate diskSize', desc: 'Check regex: ^[1-9]\\d*[KMGT]$', code: 'DiskSize.IsValid()' },
+  { title: 'Validate disk sizes', desc: 'Check raw.diskSize and optional raw.systemDiskSize regex: ^[1-9]\\d*[KMGT]$', code: 'DiskSize.IsValid()' },
   { title: 'Convert to MiB', desc: 'K→KiB, M→MiB, G→GiB, T→TiB then ÷ MiB', code: 'DiskSize.ToMiB()' },
   { title: 'Create Deployment', desc: 'Build partition table from the selected path: build uses EFI → optional ignition → SYSTEM; customize raw starts from EFI → RECOVERY → optional ignition → SYSTEM', code: 'deployment.New(opts...)' },
   { title: 'Apply Boot Config', desc: 'Set bootloader, kernel cmdline, FIPS if needed', code: 'd.BootConfig = &BootConfig{...}' },
-  { title: 'Create Disk Image', desc: 'Allocate the raw image and apply the deployment partition model', code: 'truncate / repart / installer' }
+  { title: 'Create Disk Image', desc: 'Elemental builds RAW Artifact Size -> provider expands virtual disk -> initramfs autogrow expands SYSTEM', code: 'truncate / provider disk / elemental.system_autogrow=1' }
 ]);
 
 // Build path

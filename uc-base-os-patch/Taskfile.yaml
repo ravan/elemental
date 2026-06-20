@@ -4,13 +4,14 @@ vars:
   PLATFORM: '{{default "linux/amd64" .PLATFORM}}'
   ELEMENTAL_VERSION: '{{default "3.0" .ELEMENTAL_VERSION}}'
   BASE_OS_VERSION: '{{default "16.0" .BASE_OS_VERSION}}'
-  PATCH_VERSION: '{{default "elemental-fix" .PATCH_VERSION}}'
+  PATCH_VERSION: '{{default "elemental-userdata" .PATCH_VERSION}}'
   SOURCE_IMAGE: '{{default (printf "registry.suse.com/elemental/base-os-kernel-default:%s" .BASE_OS_VERSION) .SOURCE_IMAGE}}'
   SOURCE_ISO_IMAGE: '{{default (printf "registry.suse.com/elemental/base-os-kernel-default-iso:%s" .BASE_OS_VERSION) .SOURCE_ISO_IMAGE}}'
   ELEMENTAL_IMAGE: '{{default "elemental-image:latest" .ELEMENTAL_IMAGE}}'
   TARGET_ELEMENTAL_IMAGE: '{{default (printf "docker.io/ravan/elemental:%s-%s" .ELEMENTAL_VERSION .PATCH_VERSION) .TARGET_ELEMENTAL_IMAGE}}'
   TARGET_IMAGE: '{{default (printf "docker.io/ravan/base-os-kernel-default:%s-%s" .BASE_OS_VERSION .PATCH_VERSION) .TARGET_IMAGE}}'
   TARGET_ISO_IMAGE: '{{default (printf "docker.io/ravan/base-os-kernel-default-iso:%s-%s" .BASE_OS_VERSION .PATCH_VERSION) .TARGET_ISO_IMAGE}}'
+  ISO_SOURCE_IMAGE: '{{default (printf "elemental-base-os-kernel-default:%s-%s-iso-source" .BASE_OS_VERSION .PATCH_VERSION) .ISO_SOURCE_IMAGE}}'
   TARGET_IMAGE_IN_CORE_MANIFEST: '{{default (printf "index.docker.io/ravan/base-os-kernel-default:%s-%s" .BASE_OS_VERSION .PATCH_VERSION) .TARGET_IMAGE_IN_CORE_MANIFEST}}'
   TARGET_ISO_IMAGE_IN_CORE_MANIFEST: '{{default (printf "index.docker.io/ravan/base-os-kernel-default-iso:%s-%s" .BASE_OS_VERSION .PATCH_VERSION) .TARGET_ISO_IMAGE_IN_CORE_MANIFEST}}'
   SOURCE_CORE_MANIFEST_REPO: '{{default "elemental/rke2/rke2-manifest" .SOURCE_CORE_MANIFEST_REPO}}'
@@ -172,11 +173,12 @@ tasks:
         docker buildx build \
           --platform "{{.PLATFORM}}" \
           --build-arg SOURCE_IMAGE="{{.SOURCE_IMAGE}}" \
-          --build-arg ELEMENTAL_IMAGE="{{.ELEMENTAL_IMAGE}}" \
-          -f "{{.TASKFILE_DIR}}/Dockerfile" \
-          -t "{{.TARGET_IMAGE}}" \
-          --load \
-          "{{.TASKFILE_DIR}}/.."
+        --build-arg ELEMENTAL_IMAGE="{{.ELEMENTAL_IMAGE}}" \
+        -f "{{.TASKFILE_DIR}}/Dockerfile" \
+        -t "{{.TARGET_IMAGE}}" \
+        -t "{{.ISO_SOURCE_IMAGE}}" \
+        --load \
+        "{{.TASKFILE_DIR}}/.."
 
   build-iso:
     desc: Build the patched UC installer ISO image locally
@@ -184,11 +186,11 @@ tasks:
     cmds:
       - |
         docker buildx build \
-          --platform "{{.PLATFORM}}" \
-          --no-cache \
-          --build-arg SOURCE_IMAGE="{{.TARGET_IMAGE}}" \
-            --build-arg SOURCE_ISO_IMAGE="{{.SOURCE_ISO_IMAGE}}" \
-            --build-arg ELEMENTAL_IMAGE="{{.ELEMENTAL_IMAGE}}" \
+        --platform "{{.PLATFORM}}" \
+        --no-cache \
+        --build-arg SOURCE_IMAGE="{{.ISO_SOURCE_IMAGE}}" \
+        --build-arg SOURCE_ISO_IMAGE="{{.SOURCE_ISO_IMAGE}}" \
+        --build-arg ELEMENTAL_IMAGE="{{.ELEMENTAL_IMAGE}}" \
           -f "{{.TASKFILE_DIR}}/Dockerfile.iso" \
           -t "{{.TARGET_ISO_IMAGE}}" \
           --load \
@@ -198,8 +200,19 @@ tasks:
     desc: Verify the patched UC base OS and installer ISO images
     silent: true
     cmds:
+      - task: verify-elemental
       - task: verify-base
       - task: verify-iso
+
+  verify-elemental:
+    desc: Verify the patched Elemental CLI image supports merge-mode customization
+    silent: true
+    cmds:
+      - |
+        help="$(docker run --rm --platform "{{.PLATFORM}}" "{{.TARGET_ELEMENTAL_IMAGE}}" customize --help)"
+        printf "%s\n" "$help" | grep -F -- "--mode" >/dev/null
+        printf "%s\n" "$help" | grep -F -- "'merge'" >/dev/null
+        echo "verified {{.TARGET_ELEMENTAL_IMAGE}} supports elemental3 customize --mode merge"
 
   verify-base:
     desc: Verify the patched image contains the fixed elemental3ctl relabel code path
@@ -221,15 +234,27 @@ tasks:
           fi
           echo "verified {{.TARGET_IMAGE}} contains: {{.FIX_STRING}}"
           docker cp "$cid:/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh" "$workdir/elemental-platform-resolver.sh"
-          docker cp "$cid:/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.service" "$workdir/elemental-platform-resolver.service"
-          docker cp "$cid:/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.sh" "$workdir/elemental-ignition-merge.sh"
-          docker cp "$cid:/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.service" "$workdir/elemental-ignition-merge.service"
-          grep -F 'PLATFORM_HINT' "$workdir/elemental-platform-resolver.sh" >/dev/null
-          grep -F 'Before=ignition-fetch-offline.service ignition-fetch.service ignition-disks.service ignition-files.service ignition-complete.target' "$workdir/elemental-platform-resolver.service" >/dev/null
-          grep -F 'elemental-merge' "$workdir/elemental-ignition-merge.sh" >/dev/null
-          grep -F 'Before=ignition-fetch-offline.service ignition-fetch.service ignition-disks.service ignition-files.service ignition-complete.target' "$workdir/elemental-ignition-merge.service" >/dev/null
-          echo "verified {{.TARGET_IMAGE}} contains Elemental Platform Hint resolver module"
-          echo "verified {{.TARGET_IMAGE}} contains Elemental Ignition merge module"
+            docker cp "$cid:/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.service" "$workdir/elemental-platform-resolver.service"
+            docker cp "$cid:/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.sh" "$workdir/elemental-ignition-merge.sh"
+            docker cp "$cid:/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.service" "$workdir/elemental-ignition-merge.service"
+            docker cp "$cid:/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.sh" "$workdir/elemental-system-autogrow.sh"
+            docker cp "$cid:/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.service" "$workdir/elemental-system-autogrow.service"
+            grep -F 'PLATFORM_HINT' "$workdir/elemental-platform-resolver.sh" >/dev/null
+            grep -F 'Before=ignition-fetch-offline.service ignition-fetch.service ignition-disks.service ignition-files.service ignition-complete.target' "$workdir/elemental-platform-resolver.service" >/dev/null
+            grep -F 'elemental-merge' "$workdir/elemental-ignition-merge.sh" >/dev/null
+            grep -F 'Before=ignition-fetch-offline.service ignition-fetch.service ignition-disks.service ignition-files.service ignition-complete.target' "$workdir/elemental-ignition-merge.service" >/dev/null
+          grep -F 'elemental.system_autogrow=1' "$workdir/elemental-system-autogrow.sh" >/dev/null
+          grep -F 'ConditionKernelCommandLine=elemental.system_autogrow=1' "$workdir/elemental-system-autogrow.service" >/dev/null
+          grep -F 'Wants=systemd-udev-settle.service' "$workdir/elemental-system-autogrow.service" >/dev/null
+            for unsupported in growpart partprobe parted sfdisk; do
+              if grep -F "$unsupported" "$workdir/elemental-system-autogrow.sh" >/dev/null; then
+                echo "autogrow helper must not use $unsupported" >&2
+                exit 1
+              fi
+            done
+            echo "verified {{.TARGET_IMAGE}} contains Elemental Platform Hint resolver module"
+            echo "verified {{.TARGET_IMAGE}} contains Elemental Ignition merge module"
+            echo "verified {{.TARGET_IMAGE}} contains Elemental SYSTEM autogrow module"
           docker cp "$cid:/usr/lib/modules" "$workdir/modules"
           initrd="$(find "$workdir/modules" -mindepth 2 -maxdepth 2 -name initrd -type f | head -n1)"
           if [ -z "$initrd" ]; then
@@ -238,12 +263,35 @@ tasks:
           fi
           docker run --rm --platform "{{.PLATFORM}}" \
             -v "$workdir:/work" \
-            "{{.TARGET_IMAGE}}" /bin/sh -euxc '
+              "{{.TARGET_IMAGE}}" /bin/sh -euxc '
             lsinitrd /work/modules/*/initrd | grep -F elemental-platform-resolver.service >/dev/null
             lsinitrd /work/modules/*/initrd | grep -F elemental-ignition-merge.service >/dev/null
             lsinitrd -f usr/lib/elemental/elemental-ignition-merge.sh /work/modules/*/initrd | grep -F select_merge_source >/dev/null
-          '
-          echo "verified {{.TARGET_IMAGE}} kernel module initrd contains merge-mode dracut units"
+            for required in \
+              usr/sbin/sgdisk \
+              usr/sbin/blockdev \
+              usr/bin/udevadm \
+              usr/bin/findmnt \
+              usr/sbin/blkid \
+              usr/sbin/btrfs \
+              usr/bin/mount \
+              usr/bin/umount \
+              usr/bin/lsblk \
+              usr/bin/awk \
+              usr/bin/readlink \
+              usr/bin/mkdir \
+              usr/bin/rmdir \
+              usr/bin/tr \
+              usr/bin/sleep \
+              usr/lib/systemd/system/elemental-system-autogrow.service \
+              usr/lib/elemental/elemental-system-autogrow.sh; do
+              lsinitrd /work/modules/*/initrd | grep -F "$required" >/dev/null || {
+                echo "missing autogrow initrd entry: $required" >&2
+                exit 1
+              }
+            done
+            '
+            echo "verified {{.TARGET_IMAGE}} kernel module initrd contains merge-mode and autogrow dracut units"
 
   verify-iso:
     desc: Verify the patched ISO image contains the fixed elemental3ctl relabel code path and SELinux labels
@@ -272,23 +320,34 @@ tasks:
             usr/bin/elemental3ctl \
             usr/bin/bash \
             usr/lib/modules \
-            usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh \
-            usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.service \
-            usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh \
-            etc/passwd \
+              usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh \
+              usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.service \
+              usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh \
+              usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.sh \
+              usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.service \
+              usr/lib/dracut/modules.d/32elemental-system-autogrow/module-setup.sh \
+              etc/passwd \
             etc/shadow \
             etc/selinux/config \
             etc/selinux/targeted/contexts/files/file_contexts >/dev/null
             grep -aF "$2" "$root/usr/bin/elemental3ctl" >/dev/null
           test -x "$root/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh"
-          test -x "$root/usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh"
-          grep -F 'PLATFORM_HINT' "$root/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh" >/dev/null
-          grep -F 'WantedBy=initrd.target' "$root/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.service" >/dev/null
+            test -x "$root/usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh"
+            grep -F 'PLATFORM_HINT' "$root/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh" >/dev/null
+            grep -F 'WantedBy=initrd.target' "$root/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.service" >/dev/null
             echo "verified {{.TARGET_ISO_IMAGE}} contains Elemental Platform Hint resolver module"
+            test -x "$root/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.sh"
+            test -x "$root/usr/lib/dracut/modules.d/32elemental-system-autogrow/module-setup.sh"
+            grep -F 'elemental.system_autogrow=1' "$root/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.sh" >/dev/null
+            grep -F 'ConditionKernelCommandLine=elemental.system_autogrow=1' "$root/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.service" >/dev/null
+            grep -F 'Wants=systemd-udev-settle.service' "$root/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.service" >/dev/null
+            echo "verified {{.TARGET_ISO_IMAGE}} contains Elemental SYSTEM autogrow module"
             lsinitrd "$root"/usr/lib/modules/*/initrd | grep -F elemental-platform-resolver.service >/dev/null
             lsinitrd "$root"/usr/lib/modules/*/initrd | grep -F elemental-ignition-merge.service >/dev/null
             lsinitrd -f usr/lib/elemental/elemental-ignition-merge.sh "$root"/usr/lib/modules/*/initrd | grep -F select_merge_source >/dev/null
-            echo "verified {{.TARGET_ISO_IMAGE}} kernel module initrd contains merge-mode dracut units"
+            lsinitrd "$root"/usr/lib/modules/*/initrd | grep -F elemental-system-autogrow.service >/dev/null
+            lsinitrd -f usr/lib/elemental/elemental-system-autogrow.sh "$root"/usr/lib/modules/*/initrd | grep -F 'elemental.system_autogrow=1' >/dev/null
+            echo "verified {{.TARGET_ISO_IMAGE}} kernel module initrd contains merge-mode and autogrow dracut units"
           file_contexts="$root/etc/selinux/targeted/contexts/files/file_contexts"
             [ -f "$file_contexts" ] || { echo "missing SELinux file contexts in {{.TARGET_ISO_IMAGE}}" >&2; exit 1; }
             for path in \
@@ -381,7 +440,7 @@ tasks:
     cmds:
       - |
         rm -rf "{{.TASKFILE_DIR}}/{{.CORE_MANIFEST_BUILD_DIR}}"
-        python3 "{{.TASKFILE_DIR}}/patch-core-manifests.py" \
+        uv run --with PyYAML --with zstandard python "{{.TASKFILE_DIR}}/patch-core-manifests.py" \
           --source-repo "{{.SOURCE_CORE_MANIFEST_REPO}}" \
           --target-os-image "{{.TARGET_IMAGE_IN_CORE_MANIFEST}}" \
           --target-iso-image "{{.TARGET_ISO_IMAGE_IN_CORE_MANIFEST}}" \

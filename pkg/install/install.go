@@ -21,8 +21,10 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/suse/elemental/v3/internal/bootcmdline"
 	"github.com/suse/elemental/v3/pkg/block"
 	"github.com/suse/elemental/v3/pkg/block/lsblk"
 	"github.com/suse/elemental/v3/pkg/bootloader"
@@ -110,6 +112,11 @@ func (i Installer) Install(d *deployment.Deployment) (err error) {
 	cleanup := cleanstack.NewCleanStack()
 	defer func() { err = cleanup.Cleanup(err) }()
 
+	err = applySystemAutogrowTarget(d)
+	if err != nil {
+		return err
+	}
+
 	err = i.checkTargetDisks(d)
 	if err != nil {
 		return err
@@ -150,6 +157,11 @@ func (i Installer) Reset(d *deployment.Deployment) (err error) {
 	cleanup := cleanstack.NewCleanStack()
 	defer func() { err = cleanup.Cleanup(err) }()
 
+	err = applySystemAutogrowTarget(d)
+	if err != nil {
+		return err
+	}
+
 	for _, disk := range d.Disks {
 		err = repart.ReconcileDevicePartitions(i.s, disk)
 		if err != nil {
@@ -174,6 +186,78 @@ func (i Installer) Reset(d *deployment.Deployment) (err error) {
 	}
 
 	return nil
+}
+
+func applySystemAutogrowTarget(d *deployment.Deployment) error {
+	target, ok, err := systemAutogrowTargetMiB(d)
+	if err != nil || !ok {
+		return err
+	}
+
+	for _, disk := range d.Disks {
+		var usedBeforeSystem deployment.MiB
+		for _, part := range disk.Partitions {
+			if part == nil {
+				continue
+			}
+			if part.Role == deployment.System {
+				if target <= usedBeforeSystem {
+					return fmt.Errorf("elemental system autogrow target %dMiB is smaller than preceding partitions %dMiB", target, usedBeforeSystem)
+				}
+				part.Size = target - usedBeforeSystem
+				return nil
+			}
+			usedBeforeSystem += part.Size
+		}
+	}
+
+	return nil
+}
+
+func systemAutogrowTargetMiB(d *deployment.Deployment) (deployment.MiB, bool, error) {
+	cmdlines := []string{}
+	if d.BootConfig != nil {
+		cmdlines = append(cmdlines, d.BootConfig.KernelCmdline)
+	}
+	cmdlines = append(cmdlines, d.Installer.KernelCmdline)
+
+	for _, cmdline := range cmdlines {
+		for _, field := range strings.Fields(cmdline) {
+			if !strings.HasPrefix(field, bootcmdline.SystemAutogrowTargetKernelArg) {
+				continue
+			}
+			size := strings.TrimPrefix(field, bootcmdline.SystemAutogrowTargetKernelArg)
+			mib, err := parseAutogrowTargetMiB(size)
+			return mib, true, err
+		}
+	}
+
+	return 0, false, nil
+}
+
+func parseAutogrowTargetMiB(size string) (deployment.MiB, error) {
+	if len(size) < 2 {
+		return 0, fmt.Errorf("invalid elemental system autogrow target %q", size)
+	}
+
+	unit := size[len(size)-1]
+	value, err := strconv.ParseUint(size[:len(size)-1], 10, 64)
+	if err != nil || value == 0 {
+		return 0, fmt.Errorf("invalid elemental system autogrow target %q", size)
+	}
+
+	switch unit {
+	case 'K', 'k':
+		return deployment.MiB(value / 1024), nil
+	case 'M', 'm':
+		return deployment.MiB(value), nil
+	case 'G', 'g':
+		return deployment.MiB(value * 1024), nil
+	case 'T', 't':
+		return deployment.MiB(value * 1024 * 1024), nil
+	default:
+		return 0, fmt.Errorf("invalid elemental system autogrow target %q", size)
+	}
 }
 
 func (i Installer) checkTargetDisks(d *deployment.Deployment) error {
@@ -279,6 +363,11 @@ func createPartitionVolumes(s *sys.System, cleanStack *cleanstack.CleanStack, pa
 		cleanStack.Push(func() error { return s.Mounter().Unmount(mountPoint) })
 
 		if part.FileSystem == deployment.Btrfs {
+			err = btrfs.ResizeMax(s, mountPoint)
+			if err != nil {
+				return fmt.Errorf("resizing btrfs filesystem: %w", err)
+			}
+
 			err = btrfs.SetBtrfsPartition(s, mountPoint)
 			if err != nil {
 				return fmt.Errorf("setting btrfs partition volumes: %w", err)

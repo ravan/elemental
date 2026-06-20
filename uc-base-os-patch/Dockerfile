@@ -8,13 +8,16 @@ FROM ${SOURCE_IMAGE}
 COPY --from=elemental /usr/bin/elemental3ctl /usr/bin/elemental3ctl
 COPY pkg/dracut/modules.d/29elemental-platform-resolver /usr/lib/dracut/modules.d/31elemental-platform-resolver
 COPY pkg/dracut/modules.d/30elemental-ignition-merge /usr/lib/dracut/modules.d/30elemental-ignition-merge
+COPY pkg/dracut/modules.d/32elemental-system-autogrow /usr/lib/dracut/modules.d/32elemental-system-autogrow
 
 RUN chmod 0755 \
-        /usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh \
+	/usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh \
 	/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh \
 	/usr/lib/dracut/modules.d/31elemental-platform-resolver/patch-ignition-generator.sh \
 	/usr/lib/dracut/modules.d/30elemental-ignition-merge/module-setup.sh \
-	/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.sh && \
+	/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.sh \
+	/usr/lib/dracut/modules.d/32elemental-system-autogrow/module-setup.sh \
+	/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.sh && \
 	command -v dracut >/dev/null 2>&1 && \
 	command -v lsinitrd >/dev/null 2>&1 && \
 	dracut -f --regenerate-all --add-drivers "btrfs" && \

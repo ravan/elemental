@@ -7,6 +7,12 @@ built Elemental binary.
 This works around published UC images that still miss the snapshotted `/etc`
 SELinux relabel pass.
 
+Source baseline: `registry.suse.com/elemental/base-os-kernel-default:16.0`
+
+Required initrd tools for SYSTEM autogrow: `sgdisk`, `blockdev`, `udevadm`, `findmnt`, `blkid`, `btrfs`, `mount`, `umount`, `lsblk`.
+
+Unsupported tools intentionally not used: `growpart`, `partprobe`, `parted`, `sfdisk`.
+
 ## Build
 
 ```bash
@@ -36,7 +42,7 @@ registry.suse.com/elemental/elemental:3.0
 The default patched image is:
 
 ```text
-docker.io/ravan/elemental:3.0-elemental-fix
+docker.io/ravan/elemental:3.0-elemental-userdata
 ```
 
 To build, verify, and publish the patched Elemental CLI, patched UC images, and
@@ -55,7 +61,7 @@ Defaults:
 
 - `ELEMENTAL_VERSION=3.0`
 - `BASE_OS_VERSION=16.0`
-- `PATCH_VERSION=elemental-fix`
+- `PATCH_VERSION=elemental-userdata`
 - `SOURCE_IMAGE=registry.suse.com/elemental/base-os-kernel-default:${BASE_OS_VERSION}`
 - `SOURCE_ISO_IMAGE=registry.suse.com/elemental/base-os-kernel-default-iso:${BASE_OS_VERSION}`
 - `ELEMENTAL_IMAGE=elemental-image:latest` local-only helper image for OS/ISO patching
@@ -83,22 +89,22 @@ Use `PATCH_VERSION` for patch subversions while keeping upstream versions unchan
 
 ```bash
 task --taskfile uc-base-os-patch/Taskfile.yaml build-publish \
-PATCH_VERSION=elemental-fix.1
+PATCH_VERSION=elemental-userdata.1
 ```
 
 That publishes image references like:
 
 ```text
-docker.io/ravan/elemental:3.0-elemental-fix.1
-docker.io/ravan/base-os-kernel-default:16.0-elemental-fix.1
-docker.io/ravan/base-os-kernel-default-iso:16.0-elemental-fix.1
-docker.io/ravan/release-manifest:1.35.5-elemental-fix.1
+docker.io/ravan/elemental:3.0-elemental-userdata.1
+docker.io/ravan/base-os-kernel-default:16.0-elemental-userdata.1
+docker.io/ravan/base-os-kernel-default-iso:16.0-elemental-userdata.1
+docker.io/ravan/release-manifest:1.35.5-elemental-userdata.1
 ```
 
 The published Elemental CLI replacement is:
 
 ```yaml
-image: docker.io/ravan/elemental:3.0-elemental-fix
+image: docker.io/ravan/elemental:3.0-elemental-userdata
 ```
 
 The patched core release manifest references the patched image under:
@@ -107,8 +113,8 @@ The patched core release manifest references the patched image under:
 components:
   operatingSystem:
     image:
-      base: docker.io/ravan/base-os-kernel-default:16.0-elemental-fix
-      iso: docker.io/ravan/base-os-kernel-default-iso:16.0-elemental-fix
+    base: docker.io/ravan/base-os-kernel-default:16.0-elemental-userdata
+    iso: docker.io/ravan/base-os-kernel-default-iso:16.0-elemental-userdata
 ```
 
 Use the canonical `index.docker.io/...` form in the core manifest when the
@@ -131,7 +137,7 @@ manifest image, for example:
 
 ```yaml
 corePlatform:
-  image: docker.io/ravan/release-manifest:1.35.5-elemental-fix
+  image: docker.io/ravan/release-manifest:1.35.5-elemental-userdata
 ```
 
 ELM does not need to be rebuilt for this workaround. It reads the OS and ISO

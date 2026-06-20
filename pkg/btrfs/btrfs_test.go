@@ -61,6 +61,12 @@ var _ = Describe("DirectoryUnpacker", Label("directory"), func() {
 			"btrfs", "quota", "enable", "/path/to/mountpoint",
 		}})).To(Succeed())
 	})
+	It("resizes filesystem to maximum size", func() {
+		Expect(btrfs.ResizeMax(s, "/path/to/mountpoint")).To(Succeed())
+		Expect(runner.IncludesCmds([][]string{{
+			"btrfs", "filesystem", "resize", "max", "/path/to/mountpoint",
+		}})).To(Succeed())
+	})
 	It("creates a subvolume without copy on write", func() {
 		Expect(btrfs.CreateSubvolume(s, "/path/to/subvolume", false)).To(Succeed())
 		Expect(runner.IncludesCmds([][]string{

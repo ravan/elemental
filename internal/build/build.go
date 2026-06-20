@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/suse/elemental/v3/internal/bootcmdline"
 	"github.com/suse/elemental/v3/internal/config"
 	"github.com/suse/elemental/v3/internal/image"
 	imginstall "github.com/suse/elemental/v3/internal/image/install"
@@ -149,10 +150,16 @@ func newDeployment(
 	d.Disks[0].Device = installationDevice
 	d.BootConfig.Bootloader = installation.Bootloader
 	d.BootConfig.KernelCmdline = installation.KernelCmdLine
+	d.Installer.KernelCmdline = installation.KernelCmdLine
 	d.Security.CryptoPolicy = installation.CryptoPolicy
 
 	if d.IsFipsEnabled() {
 		d.BootConfig.KernelCmdline = fips.AppendCommandLine(d.BootConfig.KernelCmdline)
+	}
+	if installation.RAW.SystemDiskSize != "" {
+		target := string(installation.RAW.SystemDiskSize)
+		d.BootConfig.KernelCmdline = bootcmdline.AppendSystemAutogrow(d.BootConfig.KernelCmdline, target)
+		d.Installer.KernelCmdline = bootcmdline.AppendSystemAutogrow(d.Installer.KernelCmdline, target)
 	}
 
 	osURI := fmt.Sprintf("%s://%s", deployment.OCI, osImage)

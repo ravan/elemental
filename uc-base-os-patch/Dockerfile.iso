@@ -16,6 +16,7 @@ COPY --from=elemental /usr/bin/elemental3ctl /work/elemental3ctl
 COPY --from=base-src /usr/lib/modules /work/base-modules
 COPY pkg/dracut/modules.d/29elemental-platform-resolver /work/31elemental-platform-resolver
 COPY pkg/dracut/modules.d/30elemental-ignition-merge /work/30elemental-ignition-merge
+COPY pkg/dracut/modules.d/32elemental-system-autogrow /work/32elemental-system-autogrow
 COPY --from=iso-src /iso/ /work/iso-in/
 
 WORKDIR /work
@@ -40,12 +41,16 @@ mkdir -p squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver
 cp -a 31elemental-platform-resolver/. squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver/
 mkdir -p squashfs-root/usr/lib/dracut/modules.d/30elemental-ignition-merge
 cp -a 30elemental-ignition-merge/. squashfs-root/usr/lib/dracut/modules.d/30elemental-ignition-merge/
+mkdir -p squashfs-root/usr/lib/dracut/modules.d/32elemental-system-autogrow
+cp -a 32elemental-system-autogrow/. squashfs-root/usr/lib/dracut/modules.d/32elemental-system-autogrow/
 chmod 0755 \
-squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh \
-squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh \
-squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver/patch-ignition-generator.sh \
-squashfs-root/usr/lib/dracut/modules.d/30elemental-ignition-merge/module-setup.sh \
-squashfs-root/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.sh
+	squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver/module-setup.sh \
+	squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver/elemental-platform-resolver.sh \
+	squashfs-root/usr/lib/dracut/modules.d/31elemental-platform-resolver/patch-ignition-generator.sh \
+	squashfs-root/usr/lib/dracut/modules.d/30elemental-ignition-merge/module-setup.sh \
+	squashfs-root/usr/lib/dracut/modules.d/30elemental-ignition-merge/elemental-ignition-merge.sh \
+	squashfs-root/usr/lib/dracut/modules.d/32elemental-system-autogrow/module-setup.sh \
+	squashfs-root/usr/lib/dracut/modules.d/32elemental-system-autogrow/elemental-system-autogrow.sh
 
 found_initrd=0
 for base_initrd in base-modules/*/initrd; do
@@ -56,10 +61,26 @@ for base_initrd in base-modules/*/initrd; do
 	cp "${base_initrd}" "squashfs-root/usr/lib/modules/${kver}/initrd"
 	lsinitrd "squashfs-root/usr/lib/modules/${kver}/initrd" | grep -F "elemental-platform-resolver.service" >/dev/null || { echo "missing elemental-platform-resolver.service in copied initrd for ${kver}" >&2; exit 1; }
 	lsinitrd -f etc/systemd/system-generators/ignition-generator "squashfs-root/usr/lib/modules/${kver}/initrd" | grep -F "elemental-platform-resolver preserve resolved PLATFORM_ID" >/dev/null || { echo "ignition-generator platform preservation patch missing in copied initrd for ${kver}" >&2; exit 1; }
-	lsinitrd "squashfs-root/usr/lib/modules/${kver}/initrd" | grep -F "elemental-ignition-merge.service" >/dev/null || { echo "missing elemental-ignition-merge.service in copied initrd for ${kver}" >&2; exit 1; }
-  lsinitrd "squashfs-root/usr/lib/modules/${kver}/initrd" | grep -F "kernel/fs/btrfs/btrfs.ko.zst" >/dev/null || { echo "missing btrfs driver in copied initrd for ${kver}" >&2; exit 1; }
+lsinitrd "squashfs-root/usr/lib/modules/${kver}/initrd" | grep -F "elemental-ignition-merge.service" >/dev/null || { echo "missing elemental-ignition-merge.service in copied initrd for ${kver}" >&2; exit 1; }
+lsinitrd "squashfs-root/usr/lib/modules/${kver}/initrd" | grep -F "kernel/fs/btrfs/btrfs.ko.zst" >/dev/null || { echo "missing btrfs driver in copied initrd for ${kver}" >&2; exit 1; }
 done
 [ "$found_initrd" -eq 1 ] || { echo "no base initrd found under /work/base-modules" >&2; exit 1; }
+
+chroot squashfs-root /bin/bash -c 'set -euo pipefail
+dracut -f --regenerate-all --add-drivers "btrfs"
+for module_dir in /usr/lib/modules/*; do
+  [ -d "${module_dir}" ] || continue
+  kver="$(basename "${module_dir}")"
+  if [ -f "/boot/initrd-${kver}" ]; then
+    cp "/boot/initrd-${kver}" "${module_dir}/initrd"
+  fi
+done'
+
+for initrd in squashfs-root/usr/lib/modules/*/initrd; do
+  [ -f "${initrd}" ] || continue
+  lsinitrd "${initrd}" | grep -F "elemental-system-autogrow.service" >/dev/null || { echo "missing elemental-system-autogrow.service in regenerated initrd ${initrd}" >&2; exit 1; }
+  lsinitrd -f usr/lib/elemental/elemental-system-autogrow.sh "${initrd}" | grep -F "elemental.system_autogrow=1" >/dev/null || { echo "missing elemental-system-autogrow helper in regenerated initrd ${initrd}" >&2; exit 1; }
+done
 
 file_contexts="squashfs-root/etc/selinux/targeted/contexts/files/file_contexts"
 [ -f "$file_contexts" ] || { echo "missing SELinux file contexts: $file_contexts" >&2; exit 1; }

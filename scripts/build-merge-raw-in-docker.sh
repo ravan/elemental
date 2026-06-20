@@ -27,6 +27,9 @@ MODE="${MODE:-merge}"
 RESET_VOLUME="${RESET_VOLUME:-1}"
 COPY_TO_HOST="${COPY_TO_HOST:-1}"
 REQUIRE_LABELS="${REQUIRE_LABELS:-EFI RECOVERY ignition SYSTEM}"
+EXPECTED_RAW_SIZE="${EXPECTED_RAW_SIZE:-8G}"
+EXPECTED_SYSTEM_DISK_SIZE="${EXPECTED_SYSTEM_DISK_SIZE:-18G}"
+REQUIRE_AUTOGROW_FLAG="${REQUIRE_AUTOGROW_FLAG:-1}"
 
 log() {
   printf '[merge-raw] %s\n' "$*"
@@ -109,16 +112,41 @@ log "inspecting raw partition layout inside Linux"
 docker run --rm \
   --platform "$PLATFORM" \
   --privileged \
-  --device-cgroup-rule='b 7:* rmw' \
-  --device-cgroup-rule='b 259:* rmw' \
-  -v "${VOLUME}:/config" \
-  "$HELPER_IMAGE" \
-  bash -lc '
-    set -euo pipefail
-    zypper --non-interactive install --no-recommends util-linux util-linux-systemd libblkid1 parted >/dev/null
-    test -f "/config/'"${RAW_NAME}"'"
-    parted -s "/config/'"${RAW_NAME}"'" print
-    fdisk -l "/config/'"${RAW_NAME}"'"
+	--device-cgroup-rule='b 7:* rmw' \
+	--device-cgroup-rule='b 259:* rmw' \
+	-e EXPECTED_RAW_SIZE="$EXPECTED_RAW_SIZE" \
+	-e EXPECTED_SYSTEM_DISK_SIZE="$EXPECTED_SYSTEM_DISK_SIZE" \
+	-e REQUIRE_AUTOGROW_FLAG="$REQUIRE_AUTOGROW_FLAG" \
+	-v "${VOLUME}:/config" \
+	"$HELPER_IMAGE" \
+	bash -lc '
+	set -euo pipefail
+	zypper --non-interactive install --no-recommends util-linux util-linux-systemd libblkid1 parted btrfsprogs >/dev/null
+	test -f "/config/'"${RAW_NAME}"'"
+
+	size_to_bytes() {
+	  case "$1" in
+	    *K) echo $((${1%K} * 1024)) ;;
+	    *M) echo $((${1%M} * 1024 * 1024)) ;;
+	    *G) echo $((${1%G} * 1024 * 1024 * 1024)) ;;
+	    *T) echo $((${1%T} * 1024 * 1024 * 1024 * 1024)) ;;
+	    *) echo "invalid size: $1" >&2; exit 1 ;;
+	  esac
+	}
+	raw_bytes="$(stat -c%s "/config/'"${RAW_NAME}"'")"
+	expected_raw_bytes="$(size_to_bytes "$EXPECTED_RAW_SIZE")"
+	expected_system_bytes="$(size_to_bytes "$EXPECTED_SYSTEM_DISK_SIZE")"
+	[ "$raw_bytes" = "$expected_raw_bytes" ] || {
+	  echo "raw artifact size ${raw_bytes} bytes does not match EXPECTED_RAW_SIZE=${EXPECTED_RAW_SIZE}" >&2
+	  exit 1
+	}
+	[ "$raw_bytes" != "$expected_system_bytes" ] || {
+	  echo "raw artifact unexpectedly matches EXPECTED_SYSTEM_DISK_SIZE=${EXPECTED_SYSTEM_DISK_SIZE}" >&2
+	  exit 1
+	}
+
+	parted -s "/config/'"${RAW_NAME}"'" print
+	fdisk -l "/config/'"${RAW_NAME}"'"
 
     # Ensure loop nodes exist (the build container may not pre-populate /dev/loop*).
     for i in 0 1 2 3 4 5 6 7; do
@@ -163,18 +191,55 @@ docker run --rm \
     done
     if [ "$missing" != "0" ]; then
       exit 1
-    fi
-    echo "all required filesystem labels present: '"${REQUIRE_LABELS}"'"
-  '
+	fi
+	echo "all required filesystem labels present: '"${REQUIRE_LABELS}"'"
+
+	if [ "$REQUIRE_AUTOGROW_FLAG" = "1" ]; then
+	  found_flag=0
+	  for part in "${lo}p1" "${lo}p4"; do
+	    mkdir -p /mnt/check
+	    if mount -o ro "$part" /mnt/check 2>/dev/null; then
+	      if grep -R "elemental.system_autogrow=1" /mnt/check >/dev/null 2>&1; then
+	        found_flag=1
+	      fi
+	      umount /mnt/check
+	    fi
+	  done
+	  [ "$found_flag" = "1" ] || {
+	    echo "missing elemental.system_autogrow=1 in built RAW boot metadata" >&2
+	    exit 1
+	  }
+	fi
+	'
 
 if [ "$COPY_TO_HOST" = "1" ]; then
-  mkdir -p "$OUTPUT_DIR"
-  log "copying raw image to ${OUTPUT_DIR}/${RAW_NAME}"
-  docker run --rm \
-    -v "${VOLUME}:/config:ro" \
-    -v "${OUTPUT_DIR}:/host-out" \
-    "$HELPER_IMAGE" \
-    bash -lc 'cp "/config/'"${RAW_NAME}"'" "/host-out/'"${RAW_NAME}"'" && ls -lh "/host-out/'"${RAW_NAME}"'"'
+	mkdir -p "$OUTPUT_DIR"
+	log "copying raw image to ${OUTPUT_DIR}/${RAW_NAME}"
+	rm -f "${OUTPUT_DIR:?}/${RAW_NAME}"
+	docker run --rm \
+		-v "${VOLUME}:/config:ro" \
+		-v "${OUTPUT_DIR}:/host-out" \
+		"$HELPER_IMAGE" \
+		bash -lc '
+			set -euo pipefail
+			size_to_bytes() {
+				case "$1" in
+					*K) echo $((${1%K} * 1024)) ;;
+					*M) echo $((${1%M} * 1024 * 1024)) ;;
+					*G) echo $((${1%G} * 1024 * 1024 * 1024)) ;;
+					*T) echo $((${1%T} * 1024 * 1024 * 1024 * 1024)) ;;
+					*) echo "invalid size: $1" >&2; exit 1 ;;
+				esac
+			}
+			cp "/config/'"${RAW_NAME}"'" "/host-out/'"${RAW_NAME}"'"
+			actual_bytes="$(stat -c%s "/host-out/'"${RAW_NAME}"'")"
+			expected_bytes="$(size_to_bytes "'"${EXPECTED_RAW_SIZE}"'")"
+			[ "$actual_bytes" = "$expected_bytes" ] || {
+				echo "host raw artifact size ${actual_bytes} bytes does not match EXPECTED_RAW_SIZE='"${EXPECTED_RAW_SIZE}"'" >&2
+				exit 1
+			}
+			ls -lh "/host-out/'"${RAW_NAME}"'"
+		'
 fi
 
 log "done"

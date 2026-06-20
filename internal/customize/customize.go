@@ -25,6 +25,7 @@ import (
 
 	_ "embed"
 
+	"github.com/suse/elemental/v3/internal/bootcmdline"
 	"github.com/suse/elemental/v3/internal/config"
 	"github.com/suse/elemental/v3/internal/image"
 	"github.com/suse/elemental/v3/internal/image/install"
@@ -214,6 +215,7 @@ func parseDeployment(
 		KernelCmdline: install.KernelCmdLine,
 		SerialConsole: install.SerialConsole,
 	}
+	d.Installer.KernelCmdline = install.KernelCmdLine
 
 	d.Security = &deployment.SecurityConfig{
 		CryptoPolicy: install.CryptoPolicy,
@@ -221,6 +223,11 @@ func parseDeployment(
 
 	if d.IsFipsEnabled() {
 		d.BootConfig.KernelCmdline = fips.AppendCommandLine(d.BootConfig.KernelCmdline)
+	}
+	if install.RAW.SystemDiskSize != "" {
+		target := string(install.RAW.SystemDiskSize)
+		d.BootConfig.KernelCmdline = bootcmdline.AppendSystemAutogrow(d.BootConfig.KernelCmdline, target)
+		d.Installer.KernelCmdline = bootcmdline.AppendSystemAutogrow(d.Installer.KernelCmdline, target)
 	}
 
 	osURI := fmt.Sprintf("%s://%s", deployment.OCI, osImage)

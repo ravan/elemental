@@ -63,6 +63,7 @@ bootloader: grub
 kernelCmdLine: "console=ttyS0"
 raw:
   diskSize: 8G
+  systemDiskSize: 80G
 iso:
   device: "/dev/sda"
 ```
@@ -71,7 +72,8 @@ iso:
 * `kernelCmdLine` - Optional; Parameters to add to the kernel when the operating system boots up. The tool itself defines the essential parameters to boot (e.g. `root=LABEL=SYSTEM`),
    the string provided here is simply concatenated after them in order to provide a mechanism to include additional custom parameters.
 * `raw` - Required for RAW images; Specifies RAW disk image configurations.
-  * `diskSize` - Required; Specifies the size of the resulting disk image.
+* `diskSize` - Required; Specifies the **RAW Artifact Size**, the size of the produced RAW image file.
+* `systemDiskSize` - Optional; Specifies the **System Disk Target Size** expected from the provider after import. When set, Elemental enables initramfs SYSTEM autogrow. Elemental grows to the actual block device capacity and does not enforce this value as an exact guest size.
 * `iso` - Required for ISO images; Specifies ISO image configurations.
   * `device` - Required; Specifies the disk that will be used as the install device.
 

@@ -23,6 +23,7 @@ DYNAMIC_USERDATA_FILE="${DYNAMIC_USERDATA_FILE:-}"
 PROVIDER_IGNITION_FILE="${PROVIDER_IGNITION_FILE:-}"
 SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY:-}"
 SSH_PUBLIC_KEY_FILE="${SSH_PUBLIC_KEY_FILE:-${HOME}/.ssh/id_ed25519.pub}"
+GUEST_SSH="${GUEST_SSH:-}"
 
 usage() {
   cat <<'USAGE'
@@ -46,6 +47,7 @@ Options:
   --provider-ignition PATH     Full provider Ignition JSON payload to use instead
   --ssh-key KEY                SSH public key to inject for root
   --ssh-key-file PATH          SSH public key file (default: ~/.ssh/id_ed25519.pub)
+  --guest-ssh TARGET           Optional guest SSH target, for example root@192.168.122.50
   --no-start                   Create/configure VM but do not start it
   --force                      Destroy an existing VM with the same VMID first
   -h, --help                   Show this help
@@ -77,9 +79,10 @@ while [ "$#" -gt 0 ]; do
     --platform-id) PLATFORM_ID="$2"; shift 2 ;;
     --dynamic-userdata) DYNAMIC_USERDATA_FILE="$2"; shift 2 ;;
     --provider-ignition) PROVIDER_IGNITION_FILE="$2"; shift 2 ;;
-    --ssh-key) SSH_PUBLIC_KEY="$2"; shift 2 ;;
-    --ssh-key-file) SSH_PUBLIC_KEY_FILE="$2"; shift 2 ;;
-    --no-start) START_VM=0; shift ;;
+		--ssh-key) SSH_PUBLIC_KEY="$2"; shift 2 ;;
+		--ssh-key-file) SSH_PUBLIC_KEY_FILE="$2"; shift 2 ;;
+		--guest-ssh) GUEST_SSH="$2"; shift 2 ;;
+		--no-start) START_VM=0; shift ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -275,9 +278,21 @@ Next commands:
   ssh ${PVE_HOST} "qm stop ${VMID}"
 
 Expected guest checks after first boot:
-  cat /run/ignition.env
-  cat /var/lib/elemental/provider-ignition-marker
-  cat /var/lib/elemental/k8s-dynamic/userdata.yaml
-  systemctl status elemental-k8s-dynamic.service --no-pager
-  cat /var/lib/elemental/kubernetes/init.yaml
+cat /run/ignition.env
+cat /var/lib/elemental/provider-ignition-marker
+cat /var/lib/elemental/k8s-dynamic/userdata.yaml
+systemctl status elemental-k8s-dynamic.service --no-pager
+cat /var/lib/elemental/kubernetes/init.yaml
+
+Guest autogrow checks:
+journalctl -b -u elemental-system-autogrow.service --no-pager
+lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS
+findmnt /
+btrfs filesystem usage /
 EOF
+
+if [ -n "$GUEST_SSH" ]; then
+	log "running guest autogrow checks via ssh ${GUEST_SSH}"
+	ssh "$GUEST_SSH" \
+		"systemctl is-failed elemental-system-autogrow.service >/tmp/elemental-autogrow.failed && exit 1 || true; journalctl -b -u elemental-system-autogrow.service --no-pager; lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS; findmnt /; btrfs filesystem usage /"
+fi

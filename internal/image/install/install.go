@@ -69,7 +69,8 @@ type Installation struct {
 }
 
 type RAW struct {
-	DiskSize DiskSize `yaml:"diskSize" validate:"omitempty,disksize"`
+	DiskSize       DiskSize `yaml:"diskSize" validate:"omitempty,disksize"`
+	SystemDiskSize DiskSize `yaml:"systemDiskSize" validate:"omitempty,disksize"`
 }
 
 type ISO struct {

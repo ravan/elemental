@@ -14,6 +14,7 @@ BRIDGE="${BRIDGE:-vmbr0}"
 MEMORY="${MEMORY:-4096}"
 CORES="${CORES:-2}"
 DISK_SIZE="${DISK_SIZE:-18G}"
+SYSTEM_DISK_SIZE="${SYSTEM_DISK_SIZE:-18G}"
 REMOTE_DIR="${REMOTE_DIR:-/var/lib/vz/template/iso/elemental-merge-mode-template-${TEMPLATE_ID}}"
 REMOTE_RAW_NAME="${REMOTE_RAW_NAME:-$(basename "$RAW_IMAGE")}"
 FORCE="${FORCE:-0}"
@@ -37,6 +38,7 @@ Options:
   --memory MB            Template memory (default: 4096)
   --cores N              Template cores (default: 2)
   --disk-size SIZE       Proxmox-side scsi0 size after import (default: 18G)
+  --system-disk-size SIZE Expected Elemental system disk target size (default: 18G)
   --remote-dir PATH      Remote staging directory
   --force                Destroy an existing VM/template with the same ID first
   -h, --help             Show this help
@@ -50,8 +52,18 @@ log() {
 }
 
 die() {
-  printf '[proxmox-template] ERROR: %s\n' "$*" >&2
-  exit 1
+	printf '[proxmox-template] ERROR: %s\n' "$*" >&2
+	exit 1
+}
+
+size_to_mib() {
+	case "$1" in
+		*K) echo $((${1%K} / 1024)) ;;
+		*M) echo "${1%M}" ;;
+		*G) echo $((${1%G} * 1024)) ;;
+		*T) echo $((${1%T} * 1024 * 1024)) ;;
+		*) die "invalid size: $1" ;;
+	esac
 }
 
 while [ "$#" -gt 0 ]; do
@@ -62,10 +74,11 @@ while [ "$#" -gt 0 ]; do
     --raw) RAW_IMAGE="$2"; shift 2 ;;
     --storage) STORAGE="$2"; shift 2 ;;
     --bridge) BRIDGE="$2"; shift 2 ;;
-    --memory) MEMORY="$2"; shift 2 ;;
-    --cores) CORES="$2"; shift 2 ;;
-    --disk-size) DISK_SIZE="$2"; shift 2 ;;
-    --remote-dir) REMOTE_DIR="$2"; shift 2 ;;
+		--memory) MEMORY="$2"; shift 2 ;;
+		--cores) CORES="$2"; shift 2 ;;
+		--disk-size) DISK_SIZE="$2"; shift 2 ;;
+		--system-disk-size) SYSTEM_DISK_SIZE="$2"; shift 2 ;;
+		--remote-dir) REMOTE_DIR="$2"; shift 2 ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -74,6 +87,10 @@ done
 
 [ -f "$RAW_IMAGE" ] || die "raw image not found: $RAW_IMAGE"
 [ -s "$RAW_IMAGE" ] || die "raw image is empty: $RAW_IMAGE"
+
+if [ -n "${SYSTEM_DISK_SIZE:-}" ]; then
+	[ "$(size_to_mib "$DISK_SIZE")" -ge "$(size_to_mib "$SYSTEM_DISK_SIZE")" ] || die "DISK_SIZE=${DISK_SIZE} is smaller than SYSTEM_DISK_SIZE=${SYSTEM_DISK_SIZE}"
+fi
 
 if command -v qemu-img >/dev/null 2>&1; then
   log "local image metadata"

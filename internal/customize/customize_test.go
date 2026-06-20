@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -287,8 +288,9 @@ disks:
 			},
 		}
 		sideEffects["truncate"] = func(args ...string) ([]byte, error) {
-			// args = [-s 35G customized.raw]
-			Expect(args[1]).To(Equal("35G"))
+			// args = [-s 8G customized.raw]
+			Expect(args[1]).To(Equal("8G"))
+			Expect(args[1]).ToNot(Equal("80G"))
 			Expect(args[2]).To(Equal("customized.raw"))
 			return []byte{}, nil
 		}
@@ -304,7 +306,8 @@ disks:
 					KernelCmdLine: "console=ttyS0",
 					CryptoPolicy:  crypto.FIPSPolicy,
 					RAW: install.RAW{
-						DiskSize: "35G",
+						DiskSize:       "8G",
+						SystemDiskSize: "80G",
 					},
 				},
 			},
@@ -315,8 +318,61 @@ disks:
 		defaultCustomizeDeploymentValidation(customizeDeployment, def)
 		Expect(customizeDeployment.SourceOS).NotTo(BeNil())
 		Expect(customizeDeployment.SourceOS.String()).To(Equal("oci://" + expectedOS))
+		Expect(customizeDeployment.BootConfig.KernelCmdline).To(ContainSubstring("elemental.system_autogrow=1"))
+		Expect(strings.Count(customizeDeployment.BootConfig.KernelCmdline, "elemental.system_autogrow=1")).To(Equal(1))
+		Expect(strings.Fields(customizeDeployment.Installer.KernelCmdline)).To(ContainElement("console=ttyS0"))
+		Expect(customizeDeployment.Installer.KernelCmdline).To(ContainSubstring("elemental.system_autogrow=1"))
+		Expect(strings.Count(customizeDeployment.Installer.KernelCmdline, "elemental.system_autogrow=1")).To(Equal(1))
+		Expect(strings.Fields(customizeDeployment.BootConfig.KernelCmdline)).To(ContainElement("elemental.system_autogrow_target=80G"))
+		Expect(strings.Fields(customizeDeployment.Installer.KernelCmdline)).To(ContainElement("elemental.system_autogrow_target=80G"))
 		Expect(customizeDeployment.Disks[0].Device).To(BeEmpty())
 		Expect(len(customizeDeployment.Disks[0].Partitions)).To(Equal(0))
+	})
+
+	It("deduplicates system autogrow flag in deployment kernel cmdline", func() {
+		customizeRunner.FileExtractor = &fileExtractorMock{
+			extractFunc: func(uri string) (path string, err error) {
+				Expect(uri).To(Equal(expectedISO))
+				return "", nil
+			},
+		}
+		customizeDeployment := &deployment.Deployment{}
+		customizeRunner.Media = &mediaMock{
+			customizeFunc: func(d *deployment.Deployment) error {
+				customizeDeployment = d
+				return nil
+			},
+		}
+
+		def := &image.Definition{
+			Image: image.Image{
+				ImageType: "iso",
+			},
+			Configuration: &image.Configuration{
+				Installation: install.Installation{
+					Bootloader:    "grub",
+					KernelCmdLine: "console=ttyS0 elemental.system_autogrow=1",
+					SerialConsole: true,
+					CryptoPolicy:  crypto.FIPSPolicy,
+					RAW: install.RAW{
+						SystemDiskSize: "80G",
+					},
+					ISO: install.ISO{
+						Device: "/dev/sda",
+					},
+				},
+			},
+		}
+
+		err := customizeRunner.Run(context.Background(), def, output)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(customizeDeployment.BootConfig.KernelCmdline).To(ContainSubstring("console=ttyS0"))
+		Expect(customizeDeployment.BootConfig.KernelCmdline).To(ContainSubstring("elemental.system_autogrow=1"))
+		Expect(strings.Count(customizeDeployment.BootConfig.KernelCmdline, "elemental.system_autogrow=1")).To(Equal(1))
+		Expect(strings.Count(customizeDeployment.Installer.KernelCmdline, "elemental.system_autogrow=1")).To(Equal(1))
+		Expect(strings.Count(customizeDeployment.BootConfig.KernelCmdline, "elemental.system_autogrow_target=80G")).To(Equal(1))
+		Expect(strings.Count(customizeDeployment.Installer.KernelCmdline, "elemental.system_autogrow_target=80G")).To(Equal(1))
 	})
 
 	It("fails to configure components", func() {
@@ -473,6 +529,10 @@ func defaultCustomizeDeploymentValidation(dep *deployment.Deployment, def *image
 	Expect(dep.BootConfig.Bootloader).To(Equal("grub"))
 
 	expectedCMD := fmt.Sprintf("console=ttyS0 %s %s", "fips=1", fmt.Sprintf("boot=LABEL=%s", deployment.EfiLabel))
+	if def.Configuration.Installation.RAW.SystemDiskSize != "" {
+		expectedCMD += " elemental.system_autogrow=1"
+		expectedCMD += " elemental.system_autogrow_target=" + string(def.Configuration.Installation.RAW.SystemDiskSize)
+	}
 	Expect(dep.BootConfig.KernelCmdline).To(Equal(expectedCMD))
 	Expect(dep.Security.CryptoPolicy).To(Equal(crypto.FIPSPolicy))
 

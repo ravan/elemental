@@ -60,4 +60,5 @@ In practice, `elemental3ctl` runs on target systems and manages their lifecycle 
 * [Configuration Directory Guide](configuration-directory.md) - for users and/or consumers interested in checking configration options.
 * [Filesystem Layout Guide](filesystem.md) - for users and/or consumers interested in knowing the system layout and the nuances of data persistency across updates.
 * [Dynamic Elemental Services](dynamic-elemental-services.md) - for maintainers and integrators reviewing merge-mode runtime data delivery and dynamic Elemental services.
+* [System Autogrow](system-autogrow.md) - for maintainers and integrators reviewing provider-expanded RAW disk resize support.
 * [Troubleshooting Guide](troubleshooting.md) - guide for users and consumers in troubleshooting a running system.

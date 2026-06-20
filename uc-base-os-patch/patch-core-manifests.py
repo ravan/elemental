@@ -99,6 +99,11 @@ def release_manifest(repo: str, manifest: dict, token: str) -> str:
         )
         with urllib.request.urlopen(request) as response:
             blob = response.read()
+        if str(layer.get("mediaType", "")).endswith("+zstd"):
+            import zstandard
+
+            with zstandard.ZstdDecompressor().stream_reader(io.BytesIO(blob)) as reader:
+                blob = reader.read()
         with tarfile.open(fileobj=io.BytesIO(blob), mode="r:*") as archive:
             for member in archive.getmembers():
                 if os.path.basename(member.name) != "release_manifest.yaml":

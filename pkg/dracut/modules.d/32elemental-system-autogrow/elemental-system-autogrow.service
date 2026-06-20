@@ -1,0 +1,14 @@
+[Unit]
+Description=Grow Elemental SYSTEM partition filesystem
+DefaultDependencies=no
+Wants=systemd-udev-settle.service
+After=systemd-udev-settle.service ignition-setup-user.service
+Before=initrd-root-fs.target ignition-fetch-offline.service ignition-fetch.service ignition-disks.service ignition-files.service ignition-complete.target
+ConditionKernelCommandLine=elemental.system_autogrow=1
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/elemental/elemental-system-autogrow.sh
+
+[Install]
+WantedBy=initrd.target

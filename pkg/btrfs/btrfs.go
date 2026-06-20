@@ -38,6 +38,16 @@ func EnableQuota(s *sys.System, path string) error {
 	return nil
 }
 
+// ResizeMax grows a mounted btrfs filesystem to the full size of its block device.
+func ResizeMax(s *sys.System, path string) error {
+	s.Logger().Debug("Resizing btrfs filesystem to maximum size")
+	cmdOut, err := s.Runner().Run("btrfs", "filesystem", "resize", "max", path)
+	if err != nil {
+		return fmt.Errorf("resizing btrfs filesystem at %s: %s: %w", path, string(cmdOut), err)
+	}
+	return nil
+}
+
 // CreateSubvolume creates a btrfs subvolume to the given path
 func CreateSubvolume(s *sys.System, path string, copyOnWrite bool) error {
 	s.Logger().Debug("Creating subvolume: %s", path)
