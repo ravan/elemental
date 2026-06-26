@@ -4,6 +4,10 @@
 
 Elemental Product Images define the operating system, Kubernetes distribution, and product components before a node is deployed. Some deployment data is only known at runtime: the infrastructure platform, the node hostname, the RKE2 role, cluster join data, SSH keys, resource deployment authority, and deployment-specific Helm values.
 
+```bash
+elemental customize --mode merge
+```
+
 Dynamic Elemental Services provide a contract for that runtime-supplied data without rebuilding the Product Image. The Product Image declares which Elemental runtime services are enabled. Provider Ignition Config, delivered through stock Ignition provider support, writes per-node files on first boot. Elemental services then consume those files by explicit path.
 
 The first implementation is `k8s-dynamic`, which reads Dynamic Node User Data and renders Kubernetes node configuration on first boot.

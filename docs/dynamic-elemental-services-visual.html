@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynamic Elemental Services — Visual Walkthrough</title>
+<style>
+  :root{
+    --bg:#0c1018; --panel:#141a27; --panel2:#1b2333; --line:#27324a;
+    --ink:#e6ebf5; --muted:#8b98b3; --dim:#5d6b88;
+    --ign:#3b9eff; --ign-bg:#10243d;
+    --elem:#36d399; --elem-bg:#0f2a24;
+    --warn:#f5a524; --warn-bg:#2c220c;
+    --accent:#a78bfa;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    background-image:radial-gradient(900px 500px at 80% -10%,rgba(59,158,255,.08),transparent),
+      radial-gradient(700px 500px at 0% 0%,rgba(54,211,153,.06),transparent);}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+  .pill{display:inline-block;font-family:var(--mono);font-size:.72rem;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .pill.ign{color:var(--ign);border-color:#244a73;background:var(--ign-bg)}
+  .pill.elem{color:var(--elem);border-color:#1f5142;background:var(--elem-bg)}
+  .pill.warn{color:var(--warn);border-color:#5a4715;background:var(--warn-bg)}
+
+  /* ---- hero ---- */
+  header.hero{padding:64px 0 38px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:2.5rem;line-height:1.1;margin:.4em 0 .25em;letter-spacing:-.02em}
+  .lede{font-size:1.18rem;color:var(--muted);max-width:760px}
+  .lede b{color:var(--ink);font-weight:600}
+
+  /* ---- nav ---- */
+  nav{position:sticky;top:0;z-index:50;background:rgba(12,16,24,.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;gap:4px;overflow-x:auto;padding:10px 24px}
+  nav a{font-size:.82rem;color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;white-space:nowrap}
+  nav a:hover{color:var(--ink);background:var(--panel2)}
+
+  section{padding:54px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:1.7rem;margin:0 0 6px;letter-spacing:-.01em}
+  h2 .num{font-family:var(--mono);color:var(--accent);font-size:1rem;margin-right:10px}
+  .sub{color:var(--muted);margin:0 0 28px;max-width:760px}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .card h3{margin:0 0 8px;font-size:1.05rem}
+  .card p{margin:0;color:var(--muted);font-size:.92rem}
+  .card.ign{border-top:3px solid var(--ign)}
+  .card.elem{border-top:3px solid var(--elem)}
+
+  /* ---- flow timeline ---- */
+  .flow{display:grid;grid-template-columns:1fr;gap:10px}
+  .step{display:grid;grid-template-columns:46px 1fr;gap:16px;align-items:start;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:14px 16px;cursor:pointer;transition:.18s;position:relative}
+  .step:hover{border-color:#3a4a6e;transform:translateX(3px)}
+  .step .idx{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:.95rem}
+  .step[data-owner=ign] .idx{background:var(--ign-bg);color:var(--ign);border:1px solid #244a73}
+  .step[data-owner=elem] .idx{background:var(--elem-bg);color:var(--elem);border:1px solid #1f5142}
+  .step .head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+  .step .title{font-weight:600;font-size:.98rem}
+  .step .detail{color:var(--muted);font-size:.9rem;margin-top:6px;display:none}
+  .step.open .detail{display:block}
+  .step .detail code{background:var(--panel2);padding:1px 5px;border-radius:5px;color:var(--ign)}
+  .step .chev{color:var(--dim);font-size:.8rem;transition:.2s}
+  .step.open .chev{transform:rotate(90deg)}
+  .hint{font-size:.82rem;color:var(--dim);margin-bottom:14px}
+
+  /* ---- systemd ordering ---- */
+  .timeline{position:relative;margin:8px 0 0;padding-left:26px}
+  .timeline:before{content:"";position:absolute;left:9px;top:6px;bottom:6px;width:2px;background:linear-gradient(var(--ign),var(--elem))}
+  .unit{position:relative;padding:9px 0 9px 0;display:flex;gap:12px;align-items:center}
+  .unit:before{content:"";position:absolute;left:-21px;top:50%;transform:translateY(-50%);width:11px;height:11px;border-radius:50%;background:var(--bg);border:2px solid var(--dim)}
+  .unit.e:before{border-color:var(--elem);box-shadow:0 0 0 3px var(--elem-bg)}
+  .unit.i:before{border-color:var(--ign)}
+  .unit .uname{font-family:var(--mono);font-size:.84rem}
+  .unit.e .uname{color:var(--elem)}
+  .unit.i .uname{color:var(--ign)}
+  .unit .note{font-size:.8rem;color:var(--dim)}
+
+  /* ---- precedence ladder ---- */
+  .ladder{counter-reset:l;display:grid;gap:8px}
+  .rung{display:grid;grid-template-columns:30px 1fr;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .rung .n{counter-increment:l;font-family:var(--mono);color:var(--accent);font-weight:700}
+  .rung .n:before{content:counter(l)}
+  .rung b{font-weight:600}
+  .rung span{color:var(--muted);font-size:.9rem}
+
+  /* ---- two roots ---- */
+  .roots{display:grid;grid-template-columns:1fr 56px 1fr;align-items:center;gap:0}
+  @media(max-width:760px){.roots{grid-template-columns:1fr;gap:14px}.roots .arrow{transform:rotate(90deg)}}
+  .arrow{text-align:center;color:var(--accent);font-size:1.6rem}
+  .rootbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .rootbox .lbl{font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+  .rootbox code{display:block;background:var(--panel2);padding:7px 9px;border-radius:7px;margin:5px 0;color:var(--ink);font-size:.8rem;word-break:break-all}
+
+  pre{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;font-family:var(--mono);font-size:.82rem;color:#cfe2ff;margin:0}
+  pre .c{color:var(--dim)}
+  pre .k{color:var(--elem)}
+  pre .s{color:var(--warn)}
+
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tab{font-family:var(--mono);font-size:.8rem;padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer}
+  .tab.active{color:var(--ink);border-color:var(--accent);background:var(--panel2)}
+  .tabpane{display:none}.tabpane.active{display:block}
+
+  .callout{background:var(--warn-bg);border:1px solid #5a4715;border-left:3px solid var(--warn);border-radius:10px;padding:14px 16px;color:#f3d9a3;font-size:.92rem}
+  .callout b{color:var(--warn)}
+  .boundary{background:linear-gradient(135deg,var(--ign-bg),var(--elem-bg));border:1px solid var(--line);border-radius:14px;padding:22px;text-align:center}
+  .boundary .big{font-size:1.05rem}
+  .boundary .ign{color:var(--ign);font-weight:600}
+  .boundary .elem{color:var(--elem);font-weight:600}
+
+  footer{padding:34px 0 60px;color:var(--dim);font-size:.85rem}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:.85rem;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.i{background:var(--ign)}.dot.e{background:var(--elem)}
+</style>
+</head>
+<body>
+
+<header class="hero"><div class="wrap">
+  <div class="kicker">Elemental · Design Proposal</div>
+  <h1>Dynamic Elemental Services</h1>
+  <p class="lede">A contract for delivering <b>runtime-supplied node data</b> — platform, hostname, RKE2 role, join tokens, SSH keys, Helm overrides — <b>without rebuilding the Product Image</b>. Provider Ignition writes files on first boot; Elemental services consume them by explicit path.</p>
+  <pre style="margin:20px 0 4px;max-width:520px"><span class="c">#</span> user-facing command that triggers this
+elemental customize --mode merge</pre>
+  <div class="legend">
+    <span><span class="dot i"></span> Stock Ignition owns this</span>
+    <span><span class="dot e"></span> Elemental owns this</span>
+  </div>
+</div></header>
+
+<nav><div class="wrap">
+  <a href="#problem">The problem</a>
+  <a href="#flow">First-boot flow</a>
+  <a href="#mechanisms">Boot mechanisms ★</a>
+  <a href="#ordering">systemd ordering</a>
+  <a href="#platform">Platform resolution</a>
+  <a href="#merge">Merge helper</a>
+  <a href="#boundary">Ownership boundary</a>
+  <a href="#example">k8s-dynamic</a>
+</div></nav>
+
+<div class="wrap">
+
+<!-- PROBLEM -->
+<section id="problem">
+  <h2><span class="num">00</span>What's known when</h2>
+  <p class="sub">The Product Image is built once. But six-plus pieces of deployment data only exist at runtime. Dynamic services bridge that gap without a rebuild.</p>
+  <div class="grid2">
+    <div class="card elem">
+      <h3>Baked at build time</h3>
+      <p>Operating system · Kubernetes distribution · product components — fixed inside the Product Image.</p>
+    </div>
+    <div class="card ign">
+      <h3>Only known at runtime</h3>
+      <p>Infrastructure platform · hostname · RKE2 role · cluster join data · SSH keys · resource-deploy authority · deployment-specific Helm values.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FLOW -->
+<section id="flow">
+  <h2><span class="num">01</span>The first-boot flow</h2>
+  <p class="sub">Six ordered steps from initramfs to a configured node. Color marks the owner at each step.</p>
+  <p class="hint">▸ Click any step to expand the detail.</p>
+  <div class="flow" id="flowList">
+    <div class="step" data-owner="elem"><div class="idx">1</div><div>
+      <div class="head"><span class="title">Initramfs resolves the Ignition platform</span><span class="chev">▶</span></div>
+      <div class="detail"><code>29elemental-platform-resolver</code> runs after udev settles and updates <code>/run/ignition.env</code> <b>before</b> Ignition fetches any provider data — so generic virtualization evidence can't force the wrong provider (e.g. Proxmox).</div>
+    </div></div>
+    <div class="step" data-owner="elem"><div class="idx">2</div><div>
+      <div class="head"><span class="title">Merge mode stages the base Ignition</span><span class="chev">▶</span></div>
+      <div class="detail"><code>30elemental-ignition-merge</code> copies the flattened Product Image base Ignition into the SUSE system config path <code>/usr/lib/ignition/base.d/10-elemental-base.ign</code>.</div>
+    </div></div>
+    <div class="step" data-owner="ign"><div class="idx">3</div><div>
+      <div class="head"><span class="title">Stock Ignition fetches Provider Ignition Config</span><span class="chev">▶</span></div>
+      <div class="detail">Through the <b>native provider</b> selected by <code>PLATFORM_ID</code>. No custom Elemental metadata fetcher or provider parser.</div>
+    </div></div>
+    <div class="step" data-owner="ign"><div class="idx">4</div><div>
+      <div class="head"><span class="title">Provider config writes runtime files</span><span class="chev">▶</span></div>
+      <div class="detail">e.g. <code>/var/lib/elemental/k8s-dynamic/userdata.yaml</code>, via normal Ignition storage configuration.</div>
+    </div></div>
+    <div class="step" data-owner="elem"><div class="idx">5</div><div>
+      <div class="head"><span class="title">Generated systemd units run the services</span><span class="chev">▶</span></div>
+      <div class="detail">Elemental-generated units invoke dynamic services with an explicit <code>--config &lt;path&gt;</code>.</div>
+    </div></div>
+    <div class="step" data-owner="elem"><div class="idx">6</div><div>
+      <div class="head"><span class="title">Service validates & writes derived config</span><span class="chev">▶</span></div>
+      <div class="detail">Valid input → derived appliance configuration. Invalid/missing input → persistent diagnostic, node stays reachable for repair.</div>
+    </div></div>
+  </div>
+</section>
+
+<!-- MECHANISMS (focus) -->
+<section id="mechanisms">
+  <h2><span class="num">02</span>Boot mechanisms <span class="pill" style="vertical-align:middle">focus</span></h2>
+  <p class="sub">Dynamic Elemental Services rest on <b>two initramfs mechanisms</b> (dracut modules that depend on the Ignition dracut module) and <b>one installed-system mechanism</b> (the generated Elemental service).</p>
+
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card elem">
+      <span class="pill elem">initramfs · dracut</span>
+      <h3 style="margin-top:10px"><code>29elemental-platform-resolver</code></h3>
+      <p>Installs <code>elemental-platform-resolver.service</code> + <code>.sh</code>. Runs after udev settles and before the Ignition fetch/disk/file/complete units. Writes <code>PLATFORM_ID</code> into <code>/run/ignition.env</code> ahead of provider fetch.</p>
+      <p style="margin-top:10px">It also <b>patches Ignition's systemd generator</b> in the target initramfs so an already-resolved <code>PLATFORM_ID</code> survives later generator reruns — generic virtualization detection can't overwrite a Platform-Hint value.</p>
+    </div>
+    <div class="card elem">
+      <span class="pill elem">initramfs · dracut</span>
+      <h3 style="margin-top:10px"><code>30elemental-ignition-merge</code></h3>
+      <p>Installs <code>elemental-ignition-merge.service</code> + <code>.sh</code>. Runs after <code>ignition-setup-user.service</code> and before the same Ignition fetch/disk/file/complete units. Stages the Product Image base Ignition before Ignition evaluates system + provider config.</p>
+      <p style="margin-top:10px">Keeps two roots distinct — see <a href="#merge" style="color:var(--accent)">§ Merge helper</a>.</p>
+    </div>
+  </div>
+
+  <div class="card" style="border-top:3px solid var(--accent)">
+    <span class="pill elem">installed system</span>
+    <h3 style="margin-top:10px">Generated Elemental service — <code>elemental-k8s-dynamic.service</code></h3>
+    <p>Runs <b>after</b> Ignition has written files, and calls <code>elemental3ctl k8s-dynamic apply --config &lt;path&gt;</code>. This is the first Elemental component that reads Dynamic Node User Data. Dracut never parses that runtime file — it only guarantees the platform and base-Ignition inputs are ready before Ignition runs.</p>
+  </div>
+</section>
+
+<!-- ORDERING -->
+<section id="ordering">
+  <h2><span class="num">03</span>Where the units slot in</h2>
+  <p class="sub">Both Elemental initramfs services wedge in <b>before</b> the stock Ignition fetch chain. The installed-system service runs after Ignition completes, on the booted root.</p>
+  <div class="grid2">
+    <div>
+      <div class="pill" style="margin-bottom:8px">initramfs ordering</div>
+      <div class="timeline">
+        <div class="unit i"><span class="uname">ignition-setup-user.service</span></div>
+        <div class="unit e"><span class="uname">elemental-platform-resolver.service</span><span class="note">→ writes /run/ignition.env</span></div>
+        <div class="unit e"><span class="uname">elemental-ignition-merge.service</span><span class="note">→ stages base.d/10-elemental-base.ign</span></div>
+        <div class="unit i"><span class="uname">ignition-fetch-offline.service</span></div>
+        <div class="unit i"><span class="uname">ignition-fetch.service</span><span class="note">→ provider config fetched</span></div>
+        <div class="unit i"><span class="uname">ignition-disks.service</span></div>
+        <div class="unit i"><span class="uname">ignition-files.service</span><span class="note">→ writes userdata.yaml</span></div>
+        <div class="unit i"><span class="uname">ignition-complete.target</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="pill" style="margin-bottom:8px">installed system · post-Ignition</div>
+      <div class="timeline">
+        <div class="unit i"><span class="uname">(Ignition has written files)</span></div>
+        <div class="unit e"><span class="uname">elemental-k8s-dynamic.service</span><span class="note">→ elemental3ctl k8s-dynamic apply</span></div>
+        <div class="unit e"><span class="uname">derived config written</span><span class="note">hostname · RKE2 · SSH · Helm</span></div>
+      </div>
+      <div class="callout" style="margin-top:16px">The two dracut modules <b>depend on the Ignition dracut module</b> and only reorder around it — they never replace Ignition's own fetch logic.</div>
+    </div>
+  </div>
+</section>
+
+<!-- PLATFORM -->
+<section id="platform">
+  <h2><span class="num">04</span>Platform resolution</h2>
+  <p class="sub">The resolver picks <code>PLATFORM_ID</code> by a strict precedence, then writes it to <code>/run/ignition.env</code> before provider fetch.</p>
+  <div class="grid2">
+    <div>
+      <div class="pill" style="margin-bottom:10px">precedence (first match wins)</div>
+      <div class="ladder">
+        <div class="rung"><span class="n"></span><span><b>Existing <code>PLATFORM_ID</code></b> from <code>/run/ignition.env</code>, incl. kernel cmdline <code>ignition.platform.id</code></span></div>
+        <div class="rung"><span class="n"></span><span><b>Platform Hint boot media</b></span></div>
+        <div class="rung"><span class="n"></span><span><b>Local non-network cloud detection</b> — AWS, GCP, Azure</span></div>
+        <div class="rung"><span class="n"></span><span><b>No change</b> to Ignition behavior if nothing confident resolves</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="pill" style="margin-bottom:10px">Platform Hint contract</div>
+      <div class="rootbox">
+        <div><span class="lbl">fs label</span></div>
+        <code>PLATFORM_HINT</code>
+        <div style="margin-top:8px"><span class="lbl">file · key</span></div>
+        <code>/grubenv → platform_id</code>
+        <div style="margin-top:8px"><span class="lbl">accepted values</span></div>
+        <code>proxmoxve · kubevirt · openstack · metal · qemu</code>
+      </div>
+      <div class="callout" style="margin-top:14px">Reads <b>only</b> the <code>platform_id</code> key and validates the allow-list. It does <b>not</b> source or execute <code>/grubenv</code>. <code>ELEMENTAL_PLATFORM</code> is not an alias.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MERGE -->
+<section id="merge">
+  <h2><span class="num">05</span>Merge helper — two roots</h2>
+  <p class="sub">The merge helper exists to move one file from a source it understands into a target stock Ignition understands. Keeping these distinct is the whole job.</p>
+  <div class="roots">
+    <div class="rootbox" style="border-top:3px solid var(--elem)">
+      <div class="lbl">Source — embedded Ignition media</div>
+      <code>/ignition/elemental-merge <span style="color:var(--dim)">(marker)</span></code>
+      <code>/ignition/config.ign <span style="color:var(--dim)">(flattened base)</span></code>
+      <p style="color:var(--muted);font-size:.84rem;margin:8px 0 0">May mount <code>/dev/disk/by-label/ignition</code>; handles the nested <code>/ignition/ignition</code> layout.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="rootbox" style="border-top:3px solid var(--ign)">
+      <div class="lbl">Target — Ignition system config root</div>
+      <code>/usr/lib/ignition/base.d/10-elemental-base.ign</code>
+      <p style="color:var(--muted);font-size:.84rem;margin:8px 0 0">The SUSE Ignition system config path consumed by stock Ignition on the installed system's first boot.</p>
+    </div>
+  </div>
+  <p class="sub" style="margin-top:22px">After the handoff, stock Ignition is solely responsible for loading runtime provider data. <code>elemental3 customize --mode merge</code> produces the embedded partition + marker. <b>Scope is the installed system's first boot</b> — not ISO live-boot merge semantics.</p>
+</section>
+
+<!-- BOUNDARY -->
+<section id="boundary">
+  <h2><span class="num">06</span>The ownership boundary</h2>
+  <p class="sub">The single rule that keeps the design clean.</p>
+  <div class="boundary">
+    <p class="big">Provider Ignition Config is still <span class="ign">Ignition data</span>.<br>Dynamic Node User Data is <span class="elem">Elemental data</span>.</p>
+    <p style="color:var(--muted);margin:14px 0 0">Provider Ignition Config <b>may write</b> Dynamic Node User Data to disk — but Elemental never reinterprets provider metadata as Elemental configuration.</p>
+  </div>
+  <div class="grid2" style="margin-top:18px">
+    <div class="card"><h3>Why not parse provider metadata in Elemental?</h3><p>It would duplicate stock Ignition provider behavior and change failure semantics for invalid Provider Ignition Config.</p></div>
+    <div class="card"><h3>Failure semantics</h3><p><span class="pill warn">recoverable</span> Missing/invalid <i>service input file</i> → diagnostic, node repairable. Invalid <i>Provider Ignition Config</i> itself stays a stock Ignition failure.</p></div>
+  </div>
+</section>
+
+<!-- EXAMPLE -->
+<section id="example">
+  <h2><span class="num">07</span>k8s-dynamic — the first service</h2>
+  <p class="sub">Enabled via <code>dynamic_service.yaml</code>, generated only for merge-mode images.</p>
+  <div class="tabs">
+    <div class="tab active" data-t="t1">dynamic_service.yaml</div>
+    <div class="tab" data-t="t2">Provider writes (Ignition)</div>
+    <div class="tab" data-t="t3">Node User Data (Elemental)</div>
+    <div class="tab" data-t="t4">apply → derived files</div>
+  </div>
+
+  <div class="tabpane active" id="t1">
+<pre><span class="k">services</span>:
+  <span class="k">k8s-dynamic</span>:
+    <span class="k">enabled</span>: <span class="s">true</span>
+    <span class="k">config</span>: /var/lib/elemental/k8s-dynamic/userdata.yaml
+    <span class="k">timeout</span>: <span class="s">120</span></pre>
+    <p class="sub" style="margin-top:12px"><code>enabled</code> opts in · <code>config</code> is the explicit path passed to the unit · <code>timeout</code> is the systemd timeout (s). Valid only for merge-mode images.</p>
+  </div>
+
+  <div class="tabpane" id="t2">
+<pre><span class="c">// normal Ignition storage config — provider's job</span>
+{
+  <span class="k">"ignition"</span>: { <span class="k">"version"</span>: <span class="s">"3.5.0"</span> },
+  <span class="k">"storage"</span>: { <span class="k">"files"</span>: [{
+    <span class="k">"path"</span>: <span class="s">"/var/lib/elemental/k8s-dynamic/userdata.yaml"</span>,
+    <span class="k">"mode"</span>: 420, <span class="k">"overwrite"</span>: true,
+    <span class="k">"contents"</span>: { <span class="k">"source"</span>: <span class="s">"data:,hostname%3A%20node1..."</span> }
+  }] }
+}</pre>
+    <p class="sub" style="margin-top:12px">The provider writes the file. Dracut does not parse it.</p>
+  </div>
+
+  <div class="tabpane" id="t3">
+<pre><span class="k">hostname</span>: node1.example.com
+<span class="k">rke2</span>:
+  <span class="k">type</span>: server      <span class="c"># server | agent</span>
+  <span class="k">init</span>: <span class="s">true</span>        <span class="c"># writes init.yaml</span>
+  <span class="k">token</span>: my-cluster-token
+<span class="k">elemental</span>:
+  <span class="k">kubernetes</span>:
+    <span class="k">deployResources</span>: <span class="s">true</span>  <span class="c"># default true; set explicitly for multi-node</span>
+<span class="k">helm</span>:
+  <span class="k">values</span>:
+    <span class="k">rancher</span>: { <span class="k">hostname</span>: rancher.example.com }
+<span class="k">users</span>:
+  - <span class="k">name</span>: root
+    <span class="k">ssh_authorized_keys</span>: [ ssh-ed25519 AAAA...root@example ]</pre>
+  </div>
+
+  <div class="tabpane" id="t4">
+<pre>$ elemental3ctl k8s-dynamic apply --config &lt;path&gt;
+
+<span class="c"># validates first, then on success:</span>
+  ✓ write /etc/hostname
+  ✓ write SSH authorized keys
+  ✓ render RKE2 init.yaml | server.yaml | agent.yaml
+  ✓ create resource-deploy marker  (if deployResources)
+  ✓ apply Helm overrides           (only to image-enabled charts)
+
+<span class="c"># on failure → recorded in:</span>
+  /var/lib/elemental/k8s-dynamic/status.yaml
+  <span class="c"># fix the file, rerun apply.</span></pre>
+    <div class="callout" style="margin-top:14px">Helm overrides may change values <b>only for charts already enabled</b> by the Product Image. Unknown charts or invalid overrides are <span class="pill warn">recoverable</span> errors in <code>status.yaml</code>.</div>
+  </div>
+</section>
+
+<footer>
+  <p>Visual walkthrough generated from <code>docs/dynamic-elemental-services.md</code>. Verification coverage spans the platform resolver, merge staging, dynamic-service generation, k8s-dynamic runtime, and Proxmox merge-mode integration tests.</p>
+</footer>
+
+</div>
+
+<script>
+  // expand/collapse flow steps
+  document.querySelectorAll('#flowList .step').forEach(s=>{
+    s.addEventListener('click',()=>s.classList.toggle('open'));
+  });
+  // tabs
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      document.querySelectorAll('.tabpane').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById(t.dataset.t).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>
