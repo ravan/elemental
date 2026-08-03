@@ -293,14 +293,17 @@ main() {
 	existing="$(env_value PLATFORM_ID 2>/dev/null || true)"
 	if [ -n "$existing" ]; then
 		explicit="$(cmdline_platform_id 2>/dev/null || true)"
-		if [ "$existing" != "qemu" ]; then
-			log "platform already set: $existing"
-			return 0
-		fi
+		case "$existing" in
+			qemu | metal) ;;
+			*)
+				log "platform already set: $existing"
+				return 0
+				;;
+		esac
 		if [ -n "$explicit" ]; then
-			log "platform explicitly set to generic qemu; checking platform hint"
+			log "platform explicitly set to generic $existing; checking platform hint"
 		else
-			log "platform set by generic qemu detection; checking platform hint"
+			log "platform set by generic $existing detection; checking platform hint"
 		fi
 	fi
 

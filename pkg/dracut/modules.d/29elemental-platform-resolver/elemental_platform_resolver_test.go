@@ -252,6 +252,25 @@ func TestLocalAWSDetection(t *testing.T) {
 	}
 }
 
+func TestGeneratedGenericMetalPlatformIsRefinedToAWS(t *testing.T) {
+	root := t.TempDir()
+	writeIgnitionEnv(t, root, "IGNITION_ARGS=--log-to-stdout\nPLATFORM_ID=metal\n")
+
+	out, env, err := runResolver(t, root, map[string]string{
+		"ELEMENTAL_PLATFORM_RESOLVER_HINT_ROOTS":         "",
+		"ELEMENTAL_PLATFORM_RESOLVER_DETECT_VIRT_RESULT": "amazon",
+	})
+	if err != nil {
+		t.Fatalf("resolver failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(env, "PLATFORM_ID=aws\n") {
+		t.Fatalf("expected generic metal platform to be refined to aws, got:\n%s", env)
+	}
+	if strings.Contains(env, "PLATFORM_ID=metal\n") {
+		t.Fatalf("expected generic metal platform to be replaced, got:\n%s", env)
+	}
+}
+
 func TestLocalAWSDetectionFromDMI(t *testing.T) {
 	root := t.TempDir()
 	writeIgnitionEnv(t, root, "")
